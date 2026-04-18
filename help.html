@@ -184,15 +184,23 @@
       <p>MyDeviceGuard funziona in due modalità: come <strong>pagina web</strong> aperta dal browser, o come <strong>app installata</strong> sulla schermata Home / Dock / menu Start. La seconda è nettamente consigliata perché sblocca funzionalità come le notifiche, un'icona dedicata, finestra senza barra URL, e avvio rapido.</p>
 
       <h3>Su iPhone / iPad</h3>
+      <p>Su iOS, la Fotocamera e il lettore QR aprono sempre i link nel <strong>browser predefinito del sistema</strong>. Se installi la PWA in un browser, ma il predefinito è un altro, i QR di pairing finiscono in un'app diversa da quella dove hai i tuoi dati. Si creano "due MyDeviceGuard" separati che non si parlano.</p>
+      <p><strong>La regola d'oro è: installa la PWA nello stesso browser che è il tuo predefinito iOS.</strong></p>
+      <p>Per verificare e scegliere il browser predefinito:</p>
       <ol class="step">
-        <li>Apri il link della PWA in <strong>Safari</strong> (importante: Safari, non Chrome, perché iOS permette l'installazione completa solo da Safari).</li>
+        <li>Impostazioni iPhone → App → <strong>App browser predefinita</strong></li>
+        <li>Scegli Safari o Chrome (o altro).</li>
+      </ol>
+      <p>Ora installa la PWA nello stesso browser che hai scelto:</p>
+      <ol class="step">
+        <li>Apri il link della PWA nel browser che hai impostato come predefinito.</li>
         <li>Tocca il bottone <strong>Condividi</strong> (quadrato con freccia in alto).</li>
         <li>Scorri e tocca <strong>Aggiungi alla schermata Home</strong>.</li>
         <li>Conferma il nome "MyDeviceGuard" e tocca <strong>Aggiungi</strong>.</li>
       </ol>
-      <p>Da ora in poi trovi l'icona dello scudo sulla home dell'iPhone. Aprendola da lì, la PWA parte a schermo intero senza la barra di Safari.</p>
+      <p>Da ora in poi l'icona dello scudo è sulla home dell'iPhone. Aprendola, la PWA parte a schermo intero senza barra URL. Ogni volta che scansioni un QR di pairing, la Fotocamera apre lo stesso browser e quindi la stessa PWA: tutto funziona senza attriti.</p>
       <div class="warn-box">
-        ⚠️ <strong>Importante per iPhone:</strong> le notifiche push funzionano <em>solo</em> se apri la PWA dalla schermata Home (modalità standalone). Se la apri in Safari come sito web normale, le notifiche non sono disponibili. Richiede iOS 16.4 o superiore.
+        ⚠️ <strong>Importante per iPhone:</strong> le notifiche push funzionano <em>solo</em> se apri la PWA dalla schermata Home (modalità standalone), indipendentemente da quale browser l'hai installata. Richiede iOS 16.4 o superiore. In modalità web normale (browser aperto come sito) non sono disponibili.
       </div>
 
       <h3>Su Mac (Chrome, Edge, Brave)</h3>
@@ -219,7 +227,7 @@
       </ol>
 
       <div class="note">
-        💡 <strong>Scegli un solo browser per l'installazione.</strong> Se installi la PWA sia da Safari che da Chrome, avrai due installazioni separate con database separati. È comodo se vuoi profili distinti, confusionario se non è intenzionale.
+        💡 <strong>Una sola installazione per device.</strong> I dati della PWA sono separati per browser: se la installi sia da Safari che da Chrome sullo stesso iPhone, ti ritrovi due PWA diverse, ciascuna con i propri log e pairing. Su iPhone è particolarmente importante che l'installazione sia coerente col browser predefinito (vedi la regola d'oro sopra). Su Mac/Windows/Android puoi installarla dal browser che preferisci — l'importante è usare sempre quello.
       </div>
       <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
     </div>
@@ -414,7 +422,7 @@
       </ol>
 
       <div class="warn-box">
-        ⚠️ <strong>Attenzione al browser.</strong> Su iOS, la Fotocamera apre i link nel browser predefinito (di solito Safari). Se la PWA è installata da Chrome invece che Safari, i dati del pairing finiscono in Safari e non nell'app installata. Consiglio: scegli un solo browser (Safari per iOS è consigliato) e installa la PWA da quello. Vedi <a href="#installare">sezione 4</a>.
+        ⚠️ <strong>Attenzione al browser su iPhone.</strong> La Fotocamera iOS apre i link nel browser predefinito di sistema. Se la PWA è installata in un browser diverso dal predefinito, i dati del pairing finiscono nell'app sbagliata. Assicurati che il browser predefinito iOS e quello usato per installare la PWA coincidano — vedi <a href="#installare">sezione 4</a>.
       </div>
 
       <h3>Se il QR non si legge</h3>
@@ -648,8 +656,14 @@
       <h3>"Scarica log" dal Controller non mostra nulla</h3>
       <p>Il device remoto deve avere aperta una pagina della PWA che sappia rispondere ai comandi: la pagina Pairing con QR attivo, oppure la pagina Tracker con "Attiva ricevitore" premuto. Se la pagina è chiusa, il comando cade nel vuoto.</p>
 
-      <h3>Sull'iPhone il QR apre Chrome ma la PWA è installata da Safari</h3>
-      <p>Fotocamera iOS apre i link nel browser predefinito di sistema. Se questo è diverso dal browser con cui hai installato la PWA, i pairing finiscono in un "altro MyDeviceGuard". Soluzione: scegli un solo browser (Safari consigliato), disinstalla l'altro dall'home, reinstalla la PWA dall'unico browser scelto. In alternativa, usa il copia-incolla manuale del codice invece che lo scan QR.</p>
+      <h3>Sull'iPhone il QR apre un browser diverso dalla PWA installata</h3>
+      <p>La Fotocamera iOS apre i link nel browser predefinito di sistema. Se questo è diverso dal browser con cui hai installato la PWA, il pairing finisce in "un altro MyDeviceGuard" separato. Soluzione: allinea le due cose.</p>
+      <ol>
+        <li>Impostazioni iOS → App → App browser predefinita → scegli il browser che vuoi usare (Safari o Chrome).</li>
+        <li>Rimuovi l'icona della PWA dalla home (se era installata dal browser "sbagliato").</li>
+        <li>Apri il link della PWA nel browser scelto e reinstallala da lì.</li>
+      </ol>
+      <p>Da quel momento la Fotocamera aprirà sempre la stessa app della PWA. In alternativa, usa il copia-incolla manuale del codice di pairing invece dello scan QR.</p>
 
       <h3>Le notifiche non arrivano anche se concesse</h3>
       <p>Controlla:</p>
