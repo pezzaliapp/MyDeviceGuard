@@ -44,6 +44,28 @@
     </div>
 
     <div class="card">
+      <h2>🔔 Notifiche push locali</h2>
+      <p class="dim">Ricevi avvisi di sistema nel Centro Notifiche quando vengono rilevati cambiamenti o anomalie, anche se la PWA non è in primo piano.</p>
+      <div class="kv"><span class="k">Supporto browser</span><span class="v" id="notifSupport">–</span></div>
+      <div class="kv"><span class="k">Permesso</span><span class="v" id="notifPerm">–</span></div>
+      <div class="kv"><span class="k">Livello</span><span class="v">
+        <select id="notifLevel" style="min-width:auto">
+          <option value="off">Nessuna</option>
+          <option value="danger">Solo critici</option>
+          <option value="warn">Avvisi e critici</option>
+          <option value="all">Tutte</option>
+        </select>
+      </span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="notifRequestBtn">Abilita notifiche</button>
+        <button class="btn" id="notifTestBtn">🧪 Invia test</button>
+      </div>
+      <p class="small dim" style="margin-top:10px">
+        📱 Su iPhone le notifiche funzionano solo se hai <strong>installato la PWA sulla schermata Home</strong> (iOS 16.4+). In Safari/Chrome web normale non sono disponibili.
+      </p>
+    </div>
+
+    <div class="card">
       <h2>⏱️ Audit schedulato</h2>
       <p class="dim">Quando attivo, la PWA esegue l'audit periodicamente in background e genera alert se qualcosa cambia rispetto all'ultima scansione (permessi concessi, nuovi dispositivi HID, HTTPS spento, ecc.).</p>
       <div class="kv"><span class="k">Stato</span><span class="v" id="schedState"><span class="badge dim">disattivo</span></span></div>
@@ -85,6 +107,7 @@
 
   <script src="js/common.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/notifications.js"></script>
   <script src="js/security.js"></script>
   <script>
     const runBtn = document.getElementById('runBtn');
@@ -252,6 +275,89 @@
 
     refreshSchedUI();
     setInterval(refreshSchedUI, 30000);
+
+    // ---------- Notifiche push UI ----------
+    const notifSupport = document.getElementById('notifSupport');
+    const notifPerm = document.getElementById('notifPerm');
+    const notifLevel = document.getElementById('notifLevel');
+    const notifRequestBtn = document.getElementById('notifRequestBtn');
+    const notifTestBtn = document.getElementById('notifTestBtn');
+
+    function refreshNotifUI() {
+      const supp = MDG.notifications.isSupported();
+      notifSupport.innerHTML = supp
+        ? '<span class="badge ok">sì</span>'
+        : '<span class="badge danger">non supportato</span>';
+
+      const perm = MDG.notifications.getPermission();
+      const permMap = {
+        granted: '<span class="badge ok">concesso</span>',
+        denied: '<span class="badge danger">negato</span>',
+        default: '<span class="badge warn">da richiedere</span>',
+        unsupported: '<span class="badge dim">—</span>'
+      };
+      notifPerm.innerHTML = permMap[perm] || perm;
+      notifLevel.value = MDG.notifications.getLevel();
+
+      if (!supp) {
+        notifRequestBtn.disabled = true;
+        notifTestBtn.disabled = true;
+        notifRequestBtn.textContent = 'Non supportato';
+      } else if (perm === 'granted') {
+        notifRequestBtn.textContent = '✅ Già abilitate';
+        notifRequestBtn.disabled = true;
+        notifRequestBtn.className = 'btn';
+        notifTestBtn.disabled = false;
+      } else if (perm === 'denied') {
+        notifRequestBtn.textContent = 'Negato – sblocca dalle impostazioni browser';
+        notifRequestBtn.disabled = true;
+        notifTestBtn.disabled = true;
+      } else {
+        notifRequestBtn.textContent = 'Abilita notifiche';
+        notifRequestBtn.disabled = false;
+        notifRequestBtn.className = 'btn primary';
+        notifTestBtn.disabled = true;
+      }
+    }
+
+    notifRequestBtn.onclick = async () => {
+      try {
+        const r = await MDG.notifications.requestPermission();
+        MDG.toast('Permesso: ' + r);
+        refreshNotifUI();
+      } catch (e) {
+        MDG.toast('Errore: ' + (e.message || e));
+      }
+    };
+
+    notifLevel.onchange = () => {
+      MDG.notifications.setLevel(notifLevel.value);
+      MDG.toast('Livello notifiche aggiornato');
+    };
+
+    notifTestBtn.onclick = async () => {
+      if (MDG.notifications.getPermission() !== 'granted') {
+        MDG.toast('Prima abilita le notifiche');
+        return;
+      }
+      const ok = await MDG.notifications.notify('🧪 Notifica di test', {
+        body: 'Se vedi questa nel Centro Notifiche, il sistema funziona. Tocca per tornare alla PWA.',
+        severity: 'warn',
+        tag: 'mdg-test',
+        data: { url: 'security.html' }
+      });
+      if (!ok) {
+        MDG.toast('Livello corrente filtra questa severity – alza il livello o cambialo');
+      } else {
+        MDG.toast('Notifica inviata');
+      }
+    };
+
+    refreshNotifUI();
+    // Quando la pagina torna visibile, rileggi lo stato permesso (potrebbe essere cambiato dalle impostazioni browser)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refreshNotifUI();
+    });
 
     // run automatico all'apertura
     renderAudit();

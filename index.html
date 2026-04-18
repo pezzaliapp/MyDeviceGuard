@@ -85,6 +85,7 @@
 
   <script src="js/common.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/notifications.js"></script>
   <script src="js/security.js"></script>
   <script>
     const deviceId = MDG.getOrCreateDeviceId();
@@ -163,6 +164,11 @@
       if (danger > 0) badge = `<span class="badge danger">${danger} critici</span>`;
       else if (warn > 0) badge = `<span class="badge warn">${warn} avvisi</span>`;
       badgeEl.innerHTML = `Ultimo audit: <span class="dim">${ago}</span> ${badge}`;
+
+      // Suggerimento: se scheduler attivo ma notifiche non concesse, invita ad abilitarle
+      if (enabled && MDG.notifications && MDG.notifications.getPermission() === 'default') {
+        badgeEl.innerHTML += ' · <a href="security.html" style="color:var(--info)">Abilita notifiche →</a>';
+      }
     })();
   </script>
 </body>

@@ -244,6 +244,14 @@
       if (window.MDG && MDG.toast) {
         MDG.toast('⚠️ Digitazione anomala rilevata: ' + rate + ' tasti/sec');
       }
+      if (window.MDG && MDG.notifications) {
+        MDG.notifications.notify('⚠️ Digitazione anomala', {
+          body: `${rate} tasti/sec su ${MDG.getDeviceName() || 'questo device'} – possibile attacco HID.`,
+          severity: 'warn',
+          tag: 'mdg-typing',
+          data: { url: 'security.html' }
+        });
+      }
     }
   }
 
@@ -379,8 +387,11 @@
 
       // Se ci sono cambiamenti, generiamo alert + toast discreto
       if (changes.length && prev) {
+        let worstSeverity = 'info';
         for (const ch of changes) {
           const sev = severityFromChange(ch);
+          if (sev === 'danger') worstSeverity = 'danger';
+          else if (sev === 'warn' && worstSeverity !== 'danger') worstSeverity = 'warn';
           const fromStr = ch.from ? `${ch.from.status}:${ch.from.value}` : '—';
           const toStr = ch.to ? `${ch.to.status}:${ch.to.value}` : '—';
           await MDG.db.addAlert({
@@ -393,6 +404,20 @@
         }
         if (window.MDG && MDG.toast) {
           MDG.toast(`🔔 Audit: ${changes.length} cambiamenti di sicurezza rilevati`);
+        }
+        // Notifica di sistema – funziona anche in background (PWA installata)
+        if (window.MDG && MDG.notifications) {
+          const title = worstSeverity === 'danger'
+            ? '🚨 Cambiamenti critici sicurezza'
+            : '🔔 Cambiamenti sicurezza rilevati';
+          const summary = changes.slice(0, 3).map(c => c.key).join(', ') +
+            (changes.length > 3 ? ` e altri ${changes.length - 3}` : '');
+          MDG.notifications.notify(title, {
+            body: `${summary} su ${MDG.getDeviceName() || 'device'}. Tocca per dettagli.`,
+            severity: worstSeverity,
+            tag: 'mdg-security-change',
+            data: { url: 'security.html' }
+          });
         }
       }
 

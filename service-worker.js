@@ -17,7 +17,7 @@
  *    un toast "Aggiornato alla versione X" e si ricarica.
  */
 
-const CACHE_VERSION = 'v9';
+const CACHE_VERSION = 'v10';
 const CACHE_NAME = `mydeviceguard-${CACHE_VERSION}`;
 
 const LONG_LIVED_ASSETS = [
@@ -57,6 +57,35 @@ self.addEventListener('message', evt => {
   if (evt.data && evt.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// ---------- NOTIFICATION CLICK ----------
+// Quando l'utente tocca una notifica, apriamo/focus della PWA sulla pagina
+// indicata nei data della notifica (default: security.html).
+self.addEventListener('notificationclick', evt => {
+  evt.notification.close();
+  const target = (evt.notification.data && evt.notification.data.url) || 'security.html';
+  evt.waitUntil((async () => {
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // Se c'è già una finestra della PWA aperta, portala in primo piano
+    for (const c of allClients) {
+      try {
+        if (c.url && c.url.indexOf(self.location.origin) === 0) {
+          await c.focus();
+          if (c.navigate) {
+            try { await c.navigate(target); } catch (_) {}
+          } else if (c.postMessage) {
+            c.postMessage({ type: 'NAVIGATE', url: target });
+          }
+          return;
+        }
+      } catch (_) {}
+    }
+    // Altrimenti apri una nuova finestra
+    if (self.clients.openWindow) {
+      await self.clients.openWindow(target);
+    }
+  })());
 });
 
 function isDynamicRequest(url) {

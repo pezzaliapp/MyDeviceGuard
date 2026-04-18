@@ -131,6 +131,9 @@ if ('serviceWorker' in navigator) {
         if (e.data && e.data.type === 'SW_UPDATED') {
           toast('🔄 Aggiornamento installato – ricarico…', 1500);
           setTimeout(() => location.reload(), 1600);
+        } else if (e.data && e.data.type === 'NAVIGATE' && e.data.url) {
+          // Arrivo da click su una notifica quando non potevamo navigare direttamente
+          location.href = e.data.url;
         }
       });
 
