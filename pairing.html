@@ -260,43 +260,86 @@
     }
     renderList();
 
-    // ---------- AUTO-FILL DA URL HASH ----------
+    // ---------- RILEVAMENTO MODALITÀ DI APERTURA ----------
+    // Capisco se la pagina è in modalità PWA installata (standalone) o in browser normale.
+    // Servirà per suggerire all'utente di passare alla PWA installata se ce l'ha.
+    function isStandalone() {
+      return window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+        || window.navigator.standalone === true;
+    }
+
+    // ---------- AUTO-FILL DA URL HASH + AUTO-PAIR ----------
     // Quando la pagina è aperta da un link QR tipo pairing.html#code=BASE64URL(...)
-    // decodifichiamo il codice, lo mettiamo nel box e mostriamo un avviso invitante.
+    // decodifichiamo il codice, lo mettiamo nel box e mostriamo un banner con
+    // bottone "Accoppia ora". L'utente completa in 1 tap.
     (function autofillFromHash() {
       const hash = window.location.hash || '';
       if (!hash.startsWith('#code=')) return;
+
+      let data, decoded;
       try {
         const encoded = hash.slice('#code='.length);
-        const decoded = b64urlDecode(encoded);
-        const data = JSON.parse(decoded);
-        if (!data.peerId || !data.key) return;
-
-        const pasteBox = document.getElementById('pasteCode');
-        pasteBox.value = decoded;
-        if (data.name) document.getElementById('peerName').value = data.name;
-        if (data.kind) document.getElementById('peerKind').value = data.kind;
-
-        // Banner visibile sopra il box controller
-        const controllerCard = pasteBox.closest('.card');
-        const banner = document.createElement('div');
-        banner.className = 'card';
-        banner.style.background = 'rgba(0,227,148,0.12)';
-        banner.style.borderColor = 'var(--accent)';
-        banner.innerHTML = `
-          <h2>📲 Codice di pairing ricevuto</h2>
-          <p class="dim">Hai aperto un link di pairing da un altro device (<strong>${escapeHtml(data.name || 'device')}</strong>). Rivedi il nome e tocca <strong>Accoppia</strong>.</p>
-        `;
-        controllerCard.parentNode.insertBefore(banner, controllerCard);
-        controllerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        // Pulisco l'hash dall'URL per non lasciarlo in cronologia
-        history.replaceState(null, '', window.location.pathname);
-
-        MDG.toast('Codice di pairing caricato – rivedi e accoppia');
+        decoded = b64urlDecode(encoded);
+        data = JSON.parse(decoded);
+        if (!data.peerId || !data.key) throw new Error('codice incompleto');
       } catch (e) {
         MDG.toast('Link pairing non valido');
+        return;
       }
+
+      // Precompila i campi della modalità controller
+      const pasteBox = document.getElementById('pasteCode');
+      pasteBox.value = decoded;
+      if (data.name) document.getElementById('peerName').value = data.name;
+      if (data.kind) document.getElementById('peerKind').value = data.kind;
+
+      // Banner verde con bottone Accoppia subito e suggerimenti
+      const controllerCard = pasteBox.closest('.card');
+      const banner = document.createElement('div');
+      banner.className = 'card';
+      banner.style.background = 'rgba(0,227,148,0.12)';
+      banner.style.borderColor = 'var(--accent)';
+
+      const standaloneHint = isStandalone()
+        ? ''
+        : `<p class="small dim" style="margin-top:8px">
+             💡 Suggerimento: se hai già installato <strong>MyDeviceGuard</strong> come app sul device,
+             aprila da lì e incolla il codice (bottone Copia qui sotto) per mantenere i pairing
+             sempre nella stessa app. Altrimenti questo pairing resterà in questo browser.
+           </p>`;
+
+      banner.innerHTML = `
+        <h2>📲 Codice di pairing ricevuto</h2>
+        <p class="dim">Ti vuoi accoppiare con <strong>${escapeHtml(data.name || 'device')}</strong> (${escapeHtml(data.kind || 'device')}).</p>
+        <div class="btn-row">
+          <button class="btn primary" id="autoPairBtn">✅ Accoppia ora</button>
+          <button class="btn" id="autoCopyBtn">📋 Copia codice</button>
+        </div>
+        ${standaloneHint}
+      `;
+      controllerCard.parentNode.insertBefore(banner, controllerCard);
+      banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // "Accoppia ora" → stesso flusso del bottone manuale ma diretto
+      banner.querySelector('#autoPairBtn').onclick = () => {
+        document.getElementById('pairBtn').click();
+      };
+
+      // "Copia codice" → mette in clipboard per incollare nella PWA installata
+      banner.querySelector('#autoCopyBtn').onclick = () => {
+        navigator.clipboard.writeText(decoded).then(() => {
+          MDG.toast('Codice copiato – ora apri la tua PWA e incolla');
+        }).catch(() => {
+          pasteBox.select();
+          document.execCommand && document.execCommand('copy');
+          MDG.toast('Codice copiato');
+        });
+      };
+
+      // Pulisco l'hash dall'URL per non lasciarlo in cronologia / condivisione
+      history.replaceState(null, '', window.location.pathname);
+
+      MDG.toast('Codice di pairing ricevuto');
     })();
 
     window.addEventListener('beforeunload', () => { if (host) host.close(); });
