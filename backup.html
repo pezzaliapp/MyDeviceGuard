@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Backup</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">💾 Backup</div>
+        <div class="sub">Export e restore cifrati dei tuoi dati. Funziona offline.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+      <a href="backup.html" class="active">💾 Backup</a>
+    </div>
+
+    <div class="card">
+      <h2>📤 Esporta backup cifrato</h2>
+      <p class="dim">Salva tutti i tuoi dati (eventi, alert, pairing) in un file cifrato con password. Usalo per trasferire i dati a un altro device o come copia di sicurezza.</p>
+      <p class="small dim">⚠️ Se dimentichi la password il file è inutilizzabile. Non la salviamo da nessuna parte.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <input id="expPwd" type="password" placeholder="Password (min 6 caratteri)" autocomplete="new-password" />
+        <input id="expPwd2" type="password" placeholder="Ripeti password" autocomplete="new-password" />
+        <button class="btn primary" id="expBtn">💾 Scarica backup</button>
+      </div>
+      <div id="expStatus" class="small" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>📥 Importa backup</h2>
+      <p class="dim">Carica un file <code>.mdg</code> per ripristinare/unire i dati. Puoi scegliere se unire al contenuto attuale o sostituirlo.</p>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+        <input id="impFile" type="file" accept=".mdg,application/json" />
+        <input id="impPwd" type="password" placeholder="Password del backup" autocomplete="current-password" />
+        <button class="btn" id="impPreviewBtn">🔍 Apri anteprima</button>
+      </div>
+      <div id="impStatus" class="small" style="margin-top:10px"></div>
+
+      <div id="preview" style="display:none;margin-top:16px">
+        <h3>Anteprima backup</h3>
+        <div class="kv"><span class="k">Creato il</span><span class="v" id="pvDate">–</span></div>
+        <div class="kv"><span class="k">Device di origine</span><span class="v" id="pvDevice">–</span></div>
+        <div class="kv"><span class="k">Eventi</span><span class="v" id="pvEvents">–</span></div>
+        <div class="kv"><span class="k">Alert</span><span class="v" id="pvAlerts">–</span></div>
+        <div class="kv"><span class="k">Device accoppiati</span><span class="v" id="pvPeers">–</span></div>
+
+        <h3 style="margin-top:16px">Modalità di ripristino</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <label><input type="radio" name="mode" value="merge" checked /> <strong>Unione</strong> – aggiunge i dati del backup a quelli già presenti</label>
+          <label><input type="radio" name="mode" value="replace" /> <strong>Sostituzione</strong> – cancella i dati attuali e riscrive con quelli del backup</label>
+          <label style="margin-top:8px"><input type="checkbox" id="applyLs" /> Ripristina anche <strong>nome e ID device</strong> dal backup (utile per migrazione completa)</label>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn primary" id="impApplyBtn">✅ Applica ripristino</button>
+          <button class="btn" id="impCancelBtn">Annulla</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧭 Quando usare cosa</h2>
+      <div class="kv"><span class="k">Salvataggio periodico</span><span class="v">Export + riponi il file in iCloud/Drive</span></div>
+      <div class="kv"><span class="k">Migrazione vecchio → nuovo device</span><span class="v">Export dal vecchio, Import sul nuovo (modalità <em>Sostituzione</em>, ripristina identità)</span></div>
+      <div class="kv"><span class="k">Condividere pairing tra i miei device</span><span class="v">Export, Import sul secondo in modalità <em>Unione</em></span></div>
+      <div class="kv"><span class="k">Recuperare dopo cancellazione cache</span><span class="v">Import modalità <em>Sostituzione</em></span></div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/backup.js"></script>
+  <script>
+    // ---------- EXPORT ----------
+    const expBtn = document.getElementById('expBtn');
+    const expStatus = document.getElementById('expStatus');
+
+    expBtn.onclick = async () => {
+      const p1 = document.getElementById('expPwd').value;
+      const p2 = document.getElementById('expPwd2').value;
+      expStatus.textContent = '';
+      if (p1.length < 6) { expStatus.innerHTML = '<span style="color:var(--danger)">Password minimo 6 caratteri</span>'; return; }
+      if (p1 !== p2) { expStatus.innerHTML = '<span style="color:var(--danger)">Le password non coincidono</span>'; return; }
+
+      expBtn.disabled = true;
+      expStatus.innerHTML = '<span class="dim">Preparazione backup…</span>';
+      try {
+        const file = await MDG.backup.downloadBackup(p1);
+        expStatus.innerHTML = `<span style="color:var(--ok)">✅ Backup scaricato. ${file.counts.events} eventi · ${file.counts.alerts} alert · ${file.counts.peers} peer.</span>`;
+        MDG.toast('Backup scaricato');
+        document.getElementById('expPwd').value = '';
+        document.getElementById('expPwd2').value = '';
+      } catch (e) {
+        expStatus.innerHTML = '<span style="color:var(--danger)">❌ ' + (e.message || e) + '</span>';
+      } finally {
+        expBtn.disabled = false;
+      }
+    };
+
+    // ---------- IMPORT ----------
+    const impPreviewBtn = document.getElementById('impPreviewBtn');
+    const impApplyBtn = document.getElementById('impApplyBtn');
+    const impCancelBtn = document.getElementById('impCancelBtn');
+    const impStatus = document.getElementById('impStatus');
+    const preview = document.getElementById('preview');
+    let decoded = null;
+
+    impPreviewBtn.onclick = async () => {
+      const fileInput = document.getElementById('impFile');
+      const pwd = document.getElementById('impPwd').value;
+      impStatus.textContent = '';
+      preview.style.display = 'none';
+      decoded = null;
+
+      if (!fileInput.files.length) {
+        impStatus.innerHTML = '<span style="color:var(--danger)">Scegli un file .mdg</span>';
+        return;
+      }
+      if (!pwd) {
+        impStatus.innerHTML = '<span style="color:var(--danger)">Inserisci la password del backup</span>';
+        return;
+      }
+
+      impPreviewBtn.disabled = true;
+      impStatus.innerHTML = '<span class="dim">Lettura e decifratura…</span>';
+      try {
+        const text = await fileInput.files[0].text();
+        const fileObj = await MDG.backup.parseFile(text);
+        decoded = await MDG.backup.decryptFile(fileObj, pwd);
+
+        document.getElementById('pvDate').textContent = MDG.fmtDate(decoded.exportedAt);
+        document.getElementById('pvDevice').textContent = (decoded.deviceName || '—') + ' (' + (decoded.deviceKind || 'device') + ')';
+        document.getElementById('pvEvents').textContent = (decoded.events || []).length;
+        document.getElementById('pvAlerts').textContent = (decoded.alerts || []).length;
+        document.getElementById('pvPeers').textContent = (decoded.peers || []).length;
+        preview.style.display = 'block';
+        impStatus.innerHTML = '<span style="color:var(--ok)">✅ Backup valido. Rivedi e applica.</span>';
+      } catch (e) {
+        impStatus.innerHTML = '<span style="color:var(--danger)">❌ ' + (e.message || e) + '</span>';
+      } finally {
+        impPreviewBtn.disabled = false;
+      }
+    };
+
+    impApplyBtn.onclick = async () => {
+      if (!decoded) return;
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      const applyLs = document.getElementById('applyLs').checked;
+
+      const warn = mode === 'replace'
+        ? 'Sostituzione: verranno cancellati eventi e alert attuali. Confermi?'
+        : 'Unione dei dati dal backup. Confermi?';
+      if (!confirm(warn)) return;
+
+      impApplyBtn.disabled = true;
+      impStatus.innerHTML = '<span class="dim">Ripristino in corso…</span>';
+      try {
+        const res = await MDG.backup.applyRestore(decoded, { mode, applyLocalStorage: applyLs });
+        impStatus.innerHTML = `<span style="color:var(--ok)">✅ Ripristino completo. ${res.events} eventi · ${res.alerts} alert · ${res.peers} peer importati.</span>`;
+        MDG.toast('Ripristino completo');
+        // Se abbiamo cambiato l'identità, serve ricaricare per usare il nuovo deviceId
+        if (applyLs) setTimeout(() => location.reload(), 1500);
+      } catch (e) {
+        impStatus.innerHTML = '<span style="color:var(--danger)">❌ ' + (e.message || e) + '</span>';
+      } finally {
+        impApplyBtn.disabled = false;
+      }
+    };
+
+    impCancelBtn.onclick = () => {
+      decoded = null;
+      preview.style.display = 'none';
+      document.getElementById('impFile').value = '';
+      document.getElementById('impPwd').value = '';
+      impStatus.textContent = '';
+    };
+  </script>
+</body>
+</html>
