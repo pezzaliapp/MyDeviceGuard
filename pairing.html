@@ -36,6 +36,7 @@
       </div>
       <div id="qrWrap" style="display:none;margin-top:16px">
         <div id="qrContainer"></div>
+        <div id="qrError" class="small" style="display:none;color:var(--warn);margin-top:8px"></div>
         <div style="margin-top:12px" class="small dim">Oppure copia manualmente questo codice:</div>
         <textarea id="codeText" readonly style="width:100%;height:80px;margin-top:6px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px"></textarea>
         <div class="btn-row">
@@ -48,7 +49,7 @@
 
     <div class="card">
       <h2>📥 Modalità "controller"</h2>
-      <p class="dim">Esegui su questa pagina dal device con cui vuoi controllare l'altro (es. smartphone). Incolla il codice generato sopra.</p>
+      <p class="dim">Esegui su questa pagina dal device con cui vuoi controllare l'altro (es. smartphone). Incolla il codice generato sopra, o scansiona il QR con la fotocamera e poi incolla qui sotto.</p>
       <textarea id="pasteCode" placeholder="Incolla qui il codice JSON generato dall'altro device…" style="width:100%;height:100px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px"></textarea>
       <div style="margin-top:10px">
         <input id="peerName" type="text" placeholder="Nome da dare a questo pairing (es. MacBook di casa)" />
@@ -74,17 +75,48 @@
   <script src="js/common.js"></script>
   <script src="js/db.js"></script>
   <script src="js/peer.js"></script>
-  <!-- QR code library (CDN, cachata dal service worker dopo il primo caricamento) -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <!-- Libreria QR locale (Kazuhiko Arase, MIT) - nessuna dipendenza da CDN -->
+  <script src="js/qrcode.js"></script>
   <script>
     const genBtn = document.getElementById('genBtn');
     const qrWrap = document.getElementById('qrWrap');
     const qrContainer = document.getElementById('qrContainer');
+    const qrError = document.getElementById('qrError');
     const codeText = document.getElementById('codeText');
     const genStatus = document.getElementById('genStatus');
 
     let host = null;
     let currentCode = null;
+
+    // ---------- Renderer QR ----------
+    function renderQR(text) {
+      qrContainer.innerHTML = '';
+      qrError.style.display = 'none';
+
+      if (typeof qrcode !== 'function') {
+        qrError.textContent = '⚠️ Libreria QR non caricata. Usa il codice qui sotto via copia/incolla.';
+        qrError.style.display = 'block';
+        return;
+      }
+      try {
+        // QR versione auto (0), error correction level M
+        const qr = qrcode(0, 'M');
+        qr.addData(text);
+        qr.make();
+        // cellSize 6, margin 2 modules
+        qrContainer.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+        // forza dimensione leggibile
+        const svg = qrContainer.querySelector('svg');
+        if (svg) {
+          svg.style.width = '280px';
+          svg.style.height = '280px';
+          svg.style.maxWidth = '100%';
+        }
+      } catch (e) {
+        qrError.textContent = '⚠️ Errore disegno QR: ' + (e.message || e) + '. Usa il codice qui sotto.';
+        qrError.style.display = 'block';
+      }
+    }
 
     genBtn.onclick = async () => {
       genBtn.disabled = true;
@@ -103,12 +135,7 @@
               codeText.value = currentCode;
               qrWrap.style.display = 'block';
               genStatus.innerHTML = '<span class="badge ok">pronto – scansiona dal controller</span>';
-              // render QR
-              qrContainer.innerHTML = '';
-              QRCode.toCanvas(currentCode, { width: 280, margin: 1 }, (err, canvas) => {
-                if (err) { qrContainer.innerHTML = '<div class="dim">QR non disponibile (usa copia-incolla)</div>'; return; }
-                qrContainer.appendChild(canvas);
-              });
+              renderQR(currentCode);
             } else if (s.state === 'error') {
               genStatus.innerHTML = '<span class="badge danger">errore: ' + s.error + '</span>';
               genBtn.disabled = false;
@@ -169,7 +196,6 @@
           onMessage: () => {},
           onError: e => MDG.toast('Errore: ' + (e.message || e))
         });
-        // test round-trip
         conn.send({ cmd: 'get_status' });
 
         await MDG.db.savePeer({

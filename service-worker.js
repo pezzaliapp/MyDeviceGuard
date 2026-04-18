@@ -5,7 +5,7 @@
  *  - Bypass per tutto il resto (inclusi WebRTC, che non passa comunque da fetch)
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME = `mydeviceguard-${CACHE_VERSION}`;
 
 const STATIC_ASSETS = [
@@ -22,6 +22,7 @@ const STATIC_ASSETS = [
   'js/db.js',
   'js/security.js',
   'js/peer.js',
+  'js/qrcode.js',
   'icon/mydeviceguard-192.png',
   'icon/mydeviceguard-512.png'
 ];
