@@ -282,6 +282,99 @@
     }));
   }
 
+  // ---------- HID WHITELIST ----------
+  const LS_HID_WHITELIST = 'mdg.hid.whitelist';
+  const LS_HID_WATCH = 'mdg.hid.watchEnabled';
+
+  function hidId(d) {
+    const v = (d.vendorId || 0).toString(16).padStart(4, '0');
+    const p = (d.productId || 0).toString(16).padStart(4, '0');
+    return v + ':' + p;
+  }
+  function getHidWhitelist() {
+    try { return JSON.parse(localStorage.getItem(LS_HID_WHITELIST) || '{}'); }
+    catch (_) { return {}; }
+  }
+  function saveHidWhitelist(obj) {
+    localStorage.setItem(LS_HID_WHITELIST, JSON.stringify(obj || {}));
+  }
+  function addToWhitelist(device, nickname) {
+    const id = hidId(device);
+    const wl = getHidWhitelist();
+    wl[id] = {
+      id,
+      productName: device.productName || 'Dispositivo senza nome',
+      nickname: nickname || device.productName || 'HID',
+      vendorId: device.vendorId,
+      productId: device.productId,
+      addedAt: Date.now()
+    };
+    saveHidWhitelist(wl);
+    return wl[id];
+  }
+  function removeFromWhitelist(id) {
+    const wl = getHidWhitelist();
+    delete wl[id];
+    saveHidWhitelist(wl);
+  }
+  function renameInWhitelist(id, nickname) {
+    const wl = getHidWhitelist();
+    if (wl[id]) { wl[id].nickname = nickname; saveHidWhitelist(wl); }
+  }
+  function getHidWatchEnabled() {
+    return localStorage.getItem(LS_HID_WATCH) === 'true';
+  }
+  function setHidWatchEnabled(b) {
+    localStorage.setItem(LS_HID_WATCH, String(!!b));
+  }
+
+  /**
+   * Scansiona gli HID autorizzati al browser e li confronta con la whitelist.
+   * Ritorna l'elenco con flag isKnown.
+   * Se watch attivo e trova HID non in whitelist, genera alert + notifica
+   * (una sola volta nelle ultime 24h per stesso HID).
+   */
+  async function scanHidAgainstWhitelist({ notify = true } = {}) {
+    const devices = await listHidDevices();
+    const wl = getHidWhitelist();
+    const result = devices.map(d => ({
+      ...d,
+      id: hidId(d),
+      isKnown: !!wl[hidId(d)],
+      nickname: wl[hidId(d)] ? wl[hidId(d)].nickname : null
+    }));
+
+    const unknown = result.filter(d => !d.isKnown);
+    if (notify && getHidWatchEnabled() && unknown.length > 0 && window.MDG && MDG.db) {
+      const recent = await MDG.db.getAllAlerts({ limit: 200 });
+      for (const d of unknown) {
+        const seen = recent.some(a =>
+          a.type === 'hid_unknown' &&
+          a.hidId === d.id &&
+          (Date.now() - a.ts) < 24 * 3600 * 1000
+        );
+        if (seen) continue;
+        await MDG.db.addAlert({
+          type: 'hid_unknown',
+          severity: 'danger',
+          hidId: d.id,
+          description: `HID non in whitelist: ${d.productName || 'senza nome'} (${d.id})`,
+          deviceId: MDG.getOrCreateDeviceId(),
+          deviceName: MDG.getDeviceName()
+        });
+        if (window.MDG && MDG.notifications) {
+          MDG.notifications.notify('🚨 Nuovo dispositivo HID', {
+            body: `${d.productName || 'HID'} (${d.id}) non è nella whitelist.`,
+            severity: 'danger',
+            tag: 'mdg-hid-' + d.id,
+            data: { url: 'security.html' }
+          });
+        }
+      }
+    }
+    return result;
+  }
+
   // ---------- SCHEDULER AUDIT ----------
   // Esegue audit periodici in background e rileva cambiamenti rispetto all'ultimo.
   const SCHED_LS_ENABLED = 'mdg.audit.autoEnabled';
@@ -422,6 +515,12 @@
       }
 
       setLastSnapshot(snap);
+
+      // Controllo whitelist HID se attivo (può generare alert danger + notifica)
+      if (getHidWatchEnabled()) {
+        try { await scanHidAgainstWhitelist({ notify: true }); } catch (_) {}
+      }
+
       return { snap, changes };
     } catch (e) {
       console.warn('Scheduled audit error', e);
@@ -465,7 +564,13 @@
       getAutoEnabled, setAutoEnabled,
       getIntervalMinutes, setIntervalMinutes,
       getLastSnapshot,
-      runScheduledAudit
+      runScheduledAudit,
+      // HID Whitelist
+      hidId,
+      getHidWhitelist, saveHidWhitelist,
+      addToWhitelist, removeFromWhitelist, renameInWhitelist,
+      getHidWatchEnabled, setHidWatchEnabled,
+      scanHidAgainstWhitelist
     }
   });
 })();

@@ -89,11 +89,27 @@
     <div id="resultGrid"></div>
 
     <div class="card" id="hidCard" style="display:none">
-      <h2>🔌 Dispositivi HID</h2>
+      <h2>🔌 Dispositivi HID rilevati</h2>
       <table>
-        <thead><tr><th>Nome</th><th>Vendor</th><th>Product</th></tr></thead>
+        <thead><tr><th>Nome</th><th>ID (VID:PID)</th><th>Stato</th><th>Azioni</th></tr></thead>
         <tbody id="hidList"></tbody>
       </table>
+    </div>
+
+    <div class="card">
+      <h2>🔒 Whitelist HID</h2>
+      <p class="dim">Solo i dispositivi HID in questa lista sono considerati "noti". Se uno scan rileva un HID non in whitelist mentre il watch è attivo, viene generato un alert critico + notifica push.</p>
+      <div class="kv"><span class="k">Watch attivo</span><span class="v" id="hidWatchState"><span class="badge dim">spento</span></span></div>
+      <div class="kv"><span class="k">Dispositivi in whitelist</span><span class="v" id="hidWhitelistCount">0</span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="hidWatchToggle">Attiva watch</button>
+        <button class="btn" id="hidScanNow">🔍 Scansiona ora</button>
+        <button class="btn" id="hidRequestDevice">➕ Aggiungi dispositivo…</button>
+      </div>
+      <div id="hidWhitelistList" style="margin-top:12px"></div>
+      <p class="small dim" style="margin-top:10px">
+        Nota: WebHID espone solo i dispositivi già autorizzati al browser. La prima volta devi usare <em>Aggiungi dispositivo</em> per ciascun HID (es. tastiera principale, mouse) e poi promuoverlo in whitelist. Da quel momento, qualunque HID nuovo autorizzato scatena un alert.
+      </p>
     </div>
 
     <div class="card">
@@ -168,39 +184,146 @@
       }
     };
 
-    // ---------- HID scan ----------
+    // ---------- HID scan (usa whitelist) ----------
+    async function renderHidList(devices) {
+      const card = document.getElementById('hidCard');
+      const list = document.getElementById('hidList');
+      card.style.display = 'block';
+      if (!devices.length) {
+        list.innerHTML = '<tr><td colspan="4" class="dim">Nessun dispositivo HID autorizzato al browser.</td></tr>';
+        return;
+      }
+      list.innerHTML = devices.map(d => {
+        const statusBadge = d.isKnown
+          ? '<span class="badge ok">nota</span>'
+          : '<span class="badge danger">ignota</span>';
+        const action = d.isKnown
+          ? `<button class="btn danger" data-hid-remove="${escapeHtml(d.id)}" style="padding:4px 10px">Rimuovi</button>`
+          : `<button class="btn primary" data-hid-add='${escapeHtml(JSON.stringify({productName:d.productName, vendorId:d.vendorId, productId:d.productId}))}' style="padding:4px 10px">✅ Approva</button>`;
+        const name = d.nickname || d.productName || '—';
+        return `
+          <tr>
+            <td>${escapeHtml(name)}</td>
+            <td class="mono small">${escapeHtml(d.id)}</td>
+            <td>${statusBadge}</td>
+            <td>${action}</td>
+          </tr>
+        `;
+      }).join('');
+      // Delegation handler
+      list.querySelectorAll('[data-hid-add]').forEach(b => b.onclick = async () => {
+        const dev = JSON.parse(b.getAttribute('data-hid-add'));
+        const nick = prompt('Nome amichevole per questo HID:', dev.productName || '') || dev.productName;
+        MDG.security.addToWhitelist(dev, nick);
+        MDG.toast('Aggiunto alla whitelist');
+        refreshHidAll();
+      });
+      list.querySelectorAll('[data-hid-remove]').forEach(b => b.onclick = () => {
+        if (!confirm('Rimuovere dalla whitelist?')) return;
+        MDG.security.removeFromWhitelist(b.getAttribute('data-hid-remove'));
+        MDG.toast('Rimosso');
+        refreshHidAll();
+      });
+    }
+
+    async function refreshHidAll() {
+      const devices = await MDG.security.scanHidAgainstWhitelist({ notify: false });
+      renderHidList(devices);
+
+      // Whitelist pannello
+      const wl = MDG.security.getHidWhitelist();
+      const keys = Object.keys(wl);
+      document.getElementById('hidWhitelistCount').textContent = keys.length;
+      const wlEl = document.getElementById('hidWhitelistList');
+      if (keys.length === 0) {
+        wlEl.innerHTML = '<div class="dim small">Whitelist vuota. Usa "Scansiona ora" o "Aggiungi dispositivo" per popolarla.</div>';
+      } else {
+        wlEl.innerHTML = keys.map(k => {
+          const e = wl[k];
+          return `
+            <div class="kv">
+              <span class="k">${escapeHtml(e.nickname)}</span>
+              <span class="v small mono">${escapeHtml(e.id)}
+                <button class="btn" data-rename="${escapeHtml(k)}" style="padding:4px 10px;margin-left:8px">✏️</button>
+                <button class="btn danger" data-remove="${escapeHtml(k)}" style="padding:4px 10px">×</button>
+              </span>
+            </div>
+          `;
+        }).join('');
+        wlEl.querySelectorAll('[data-rename]').forEach(b => b.onclick = () => {
+          const k = b.getAttribute('data-rename');
+          const cur = wl[k].nickname;
+          const v = prompt('Nuovo nome:', cur);
+          if (v && v.trim()) { MDG.security.renameInWhitelist(k, v.trim()); refreshHidAll(); }
+        });
+        wlEl.querySelectorAll('[data-remove]').forEach(b => b.onclick = () => {
+          if (!confirm('Rimuovere?')) return;
+          MDG.security.removeFromWhitelist(b.getAttribute('data-remove'));
+          refreshHidAll();
+        });
+      }
+
+      // Stato watch
+      const watchOn = MDG.security.getHidWatchEnabled();
+      document.getElementById('hidWatchState').innerHTML = watchOn
+        ? '<span class="badge ok">attivo</span>'
+        : '<span class="badge dim">spento</span>';
+      const btn = document.getElementById('hidWatchToggle');
+      btn.textContent = watchOn ? 'Disattiva watch' : 'Attiva watch';
+      btn.className = watchOn ? 'btn danger' : 'btn primary';
+    }
+
     hidBtn.onclick = async () => {
-      const already = await MDG.security.listHidDevices();
-      let devices = already;
+      // Il vecchio "Ispeziona HID": se non ci sono HID autorizzati, chiede di selezionarne uno.
+      const devices = await MDG.security.listHidDevices();
       if (!devices.length) {
         try {
-          devices = await MDG.security.requestHidDevice();
+          await MDG.security.requestHidDevice();
         } catch (e) {
           MDG.toast(e.message || 'HID non disponibile');
           return;
         }
       }
-      const card = document.getElementById('hidCard');
-      const list = document.getElementById('hidList');
-      card.style.display = 'block';
-      if (!devices.length) {
-        list.innerHTML = '<tr><td colspan="3" class="dim">Nessun dispositivo HID autorizzato.</td></tr>';
-        return;
-      }
-      list.innerHTML = devices.map(d => `
-        <tr>
-          <td>${escapeHtml(d.productName || '—')}</td>
-          <td>0x${(d.vendorId || 0).toString(16)}</td>
-          <td>0x${(d.productId || 0).toString(16)}</td>
-        </tr>
-      `).join('');
+      await refreshHidAll();
       await MDG.db.addEvent({
         type: 'hid_scan',
         deviceId: MDG.getOrCreateDeviceId(),
         deviceName: MDG.getDeviceName(),
-        count: devices.length
+        count: (await MDG.security.listHidDevices()).length
       });
     };
+
+    document.getElementById('hidScanNow').onclick = () => refreshHidAll();
+
+    document.getElementById('hidRequestDevice').onclick = async () => {
+      try {
+        await MDG.security.requestHidDevice();
+        MDG.toast('Dispositivo autorizzato – ora puoi approvarlo');
+        refreshHidAll();
+      } catch (e) {
+        MDG.toast('Nessun dispositivo selezionato');
+      }
+    };
+
+    document.getElementById('hidWatchToggle').onclick = () => {
+      const on = MDG.security.getHidWatchEnabled();
+      MDG.security.setHidWatchEnabled(!on);
+      MDG.toast(!on ? 'Watch HID attivato' : 'Watch HID disattivato');
+      refreshHidAll();
+    };
+
+    // Popola whitelist UI al caricamento se c'è qualcosa, senza aprire hidCard
+    (async () => {
+      const wl = MDG.security.getHidWhitelist();
+      if (Object.keys(wl).length || MDG.security.getHidWatchEnabled()) {
+        await refreshHidAll();
+      } else {
+        // Almeno inizializza counters della card whitelist
+        document.getElementById('hidWhitelistCount').textContent = '0';
+        const wlEl = document.getElementById('hidWhitelistList');
+        wlEl.innerHTML = '<div class="dim small">Whitelist vuota. Usa "Scansiona ora" o "Aggiungi dispositivo" per popolarla.</div>';
+      }
+    })();
 
     // ---------- Alert feed ----------
     async function refreshAlerts() {
