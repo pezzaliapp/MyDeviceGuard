@@ -44,6 +44,11 @@
       "name": "Backup",
       "url": "backup.html",
       "icons": [{ "src": "icon/mydeviceguard-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Statistiche",
+      "url": "stats.html",
+      "icons": [{ "src": "icon/mydeviceguard-192.png", "sizes": "192x192" }]
     }
   ]
 }

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Statistiche</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">📊 Statistiche</div>
+        <div class="sub">Andamento del device nel tempo. Tutto dai dati locali, nessun invio.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+      <a href="backup.html">💾 Backup</a>
+      <a href="stats.html" class="active">📊 Stats</a>
+    </div>
+
+    <!-- STATISTICHE A COLPO D'OCCHIO -->
+    <div class="card">
+      <h2>🔢 Numeri chiave (ultimi 30 giorni)</h2>
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px;margin-top:10px">
+        <div class="card" style="background:var(--panel-2);text-align:center;margin:0">
+          <div class="small dim">Sessioni</div>
+          <div class="mono" style="font-size:28px;color:var(--info)" id="kpiSessions">0</div>
+        </div>
+        <div class="card" style="background:var(--panel-2);text-align:center;margin:0">
+          <div class="small dim">Audit eseguiti</div>
+          <div class="mono" style="font-size:28px;color:var(--accent)" id="kpiAudits">0</div>
+        </div>
+        <div class="card" style="background:var(--panel-2);text-align:center;margin:0">
+          <div class="small dim">Alert totali</div>
+          <div class="mono" style="font-size:28px;color:var(--warn)" id="kpiAlerts">0</div>
+        </div>
+        <div class="card" style="background:var(--panel-2);text-align:center;margin:0">
+          <div class="small dim">Cambi sicurezza</div>
+          <div class="mono" style="font-size:28px;color:var(--danger)" id="kpiChanges">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRAFICO 1: Sessioni per giorno -->
+    <div class="card">
+      <h2>📅 Sessioni per giorno (ultimi 14)</h2>
+      <p class="dim small">Ogni barra conta quante volte hai avviato il tracker in quella data.</p>
+      <div style="position:relative;height:260px;margin-top:10px">
+        <canvas id="chartSessions"></canvas>
+      </div>
+      <div class="empty" id="emptySessions" style="display:none">
+        <p>Nessuna sessione registrata. Vai su <a href="tracker.html">Tracker</a> e avvia il tracking per vedere i dati qui.</p>
+      </div>
+    </div>
+
+    <!-- GRAFICO 2: Salute audit nel tempo -->
+    <div class="card">
+      <h2>🩺 Salute del device nel tempo</h2>
+      <p class="dim small">Linea rossa = check critici · Linea gialla = avvisi · Linea verde = check puliti. Linee stabili = situazione stabile. Picchi = cambiamenti.</p>
+      <div style="position:relative;height:260px;margin-top:10px">
+        <canvas id="chartHealth"></canvas>
+      </div>
+      <div class="empty" id="emptyHealth" style="display:none">
+        <p>Nessuno snapshot di audit. Attiva <strong>Audit schedulato</strong> in <a href="security.html">Security</a> per iniziare a raccogliere dati.</p>
+      </div>
+    </div>
+
+    <!-- GRAFICO 3: Alert per tipo -->
+    <div class="card">
+      <h2>🚨 Alert per tipo</h2>
+      <p class="dim small">Distribuzione delle categorie di alert registrate localmente.</p>
+      <div style="position:relative;height:260px;margin-top:10px">
+        <canvas id="chartAlerts"></canvas>
+      </div>
+      <div class="empty" id="emptyAlerts" style="display:none">
+        <p>Nessun alert al momento. Sarà popolato automaticamente dall'audit schedulato o dal monitor digitazione.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧰 Azioni</h2>
+      <div class="btn-row">
+        <button class="btn" id="refreshBtn">🔄 Ricarica</button>
+        <button class="btn" id="exportBtn">⬇️ Esporta CSV riepilogo</button>
+      </div>
+      <p class="small dim" style="margin-top:10px">Il CSV contiene solo dati aggregati (per giorno) — nessun dettaglio sensibile.</p>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/chart.min.js"></script>
+  <script>
+    // Uso i colori delle variabili CSS così i grafici rispettano il tema
+    function css(varName) {
+      return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    }
+
+    function dateKey(ts) {
+      const d = new Date(ts);
+      return d.getFullYear() + '-' +
+             String(d.getMonth() + 1).padStart(2, '0') + '-' +
+             String(d.getDate()).padStart(2, '0');
+    }
+    function shortDateLabel(iso) {
+      const d = new Date(iso + 'T00:00:00');
+      return d.toLocaleDateString(navigator.language || 'it-IT', { day: '2-digit', month: 'short' });
+    }
+    function lastNDays(n) {
+      const days = [];
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      for (let i = n - 1; i >= 0; i--) {
+        const d = new Date(today); d.setDate(d.getDate() - i);
+        days.push(dateKey(d));
+      }
+      return days;
+    }
+
+    let charts = {};
+
+    async function buildAll() {
+      const events = await MDG.db.getAllEvents({ limit: 10000 });
+      const alerts = await MDG.db.getAllAlerts({ limit: 10000 });
+
+      const now = Date.now();
+      const thirtyDaysAgo = now - 30 * 24 * 3600 * 1000;
+      const recentEvents = events.filter(e => e.ts >= thirtyDaysAgo);
+      const recentAlerts = alerts.filter(a => a.ts >= thirtyDaysAgo);
+
+      // --- KPI
+      const sessions = recentEvents.filter(e => e.type === 'session_start').length;
+      const audits = recentEvents.filter(e => e.type === 'audit_snapshot' || e.type === 'security_audit').length;
+      const changes = recentAlerts.filter(a => a.type === 'security_change').length;
+
+      document.getElementById('kpiSessions').textContent = sessions;
+      document.getElementById('kpiAudits').textContent = audits;
+      document.getElementById('kpiAlerts').textContent = recentAlerts.length;
+      document.getElementById('kpiChanges').textContent = changes;
+
+      // --- Grafico 1: Sessioni per giorno (14 giorni)
+      buildSessionsChart(events);
+
+      // --- Grafico 2: Salute device nel tempo (ultimi 14 giorni)
+      buildHealthChart(events);
+
+      // --- Grafico 3: Alert per tipo
+      buildAlertsChart(alerts);
+    }
+
+    function buildSessionsChart(events) {
+      const days = lastNDays(14);
+      const counts = Object.fromEntries(days.map(d => [d, 0]));
+      for (const e of events) {
+        if (e.type !== 'session_start') continue;
+        const k = dateKey(e.ts);
+        if (k in counts) counts[k]++;
+      }
+      const total = Object.values(counts).reduce((a,b) => a+b, 0);
+      const emptyEl = document.getElementById('emptySessions');
+      const canvas = document.getElementById('chartSessions');
+      if (total === 0) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      canvas.style.display = 'block';
+      emptyEl.style.display = 'none';
+
+      if (charts.sessions) charts.sessions.destroy();
+      charts.sessions = new Chart(canvas.getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: days.map(shortDateLabel),
+          datasets: [{
+            label: 'Sessioni',
+            data: days.map(d => counts[d]),
+            backgroundColor: css('--info'),
+            borderRadius: 4
+          }]
+        },
+        options: commonChartOptions({ stepSize: 1 })
+      });
+    }
+
+    function buildHealthChart(events) {
+      const snaps = events
+        .filter(e => e.type === 'audit_snapshot' && e.summary)
+        .sort((a, b) => a.ts - b.ts);
+
+      const emptyEl = document.getElementById('emptyHealth');
+      const canvas = document.getElementById('chartHealth');
+      if (snaps.length === 0) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      canvas.style.display = 'block';
+      emptyEl.style.display = 'none';
+
+      // Aggrega per giorno: prendo l'ULTIMO snapshot di ogni giorno
+      const byDay = {};
+      for (const s of snaps) {
+        const k = dateKey(s.ts);
+        byDay[k] = s.summary;
+      }
+      const days = Object.keys(byDay).sort();
+      const lastDays = days.slice(-14);
+
+      if (charts.health) charts.health.destroy();
+      charts.health = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: lastDays.map(shortDateLabel),
+          datasets: [
+            {
+              label: 'Critici',
+              data: lastDays.map(d => byDay[d].danger || 0),
+              borderColor: css('--danger'),
+              backgroundColor: css('--danger') + '33',
+              tension: 0.3, fill: false, borderWidth: 2
+            },
+            {
+              label: 'Avvisi',
+              data: lastDays.map(d => byDay[d].warn || 0),
+              borderColor: css('--warn'),
+              backgroundColor: css('--warn') + '33',
+              tension: 0.3, fill: false, borderWidth: 2
+            },
+            {
+              label: 'OK',
+              data: lastDays.map(d => byDay[d].ok || 0),
+              borderColor: css('--ok'),
+              backgroundColor: css('--ok') + '33',
+              tension: 0.3, fill: false, borderWidth: 2
+            }
+          ]
+        },
+        options: commonChartOptions({ showLegend: true })
+      });
+    }
+
+    function buildAlertsChart(alerts) {
+      const emptyEl = document.getElementById('emptyAlerts');
+      const canvas = document.getElementById('chartAlerts');
+      if (alerts.length === 0) {
+        canvas.style.display = 'none';
+        emptyEl.style.display = 'block';
+        return;
+      }
+      canvas.style.display = 'block';
+      emptyEl.style.display = 'none';
+
+      const byType = {};
+      for (const a of alerts) {
+        const t = a.type || 'unknown';
+        byType[t] = (byType[t] || 0) + 1;
+      }
+      const labels = Object.keys(byType);
+      const data = labels.map(l => byType[l]);
+
+      if (charts.alerts) charts.alerts.destroy();
+      charts.alerts = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels,
+          datasets: [{
+            data,
+            backgroundColor: [
+              css('--warn'), css('--danger'), css('--info'),
+              css('--accent'), '#a855f7', '#ec4899', '#14b8a6'
+            ],
+            borderColor: css('--panel'),
+            borderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: { color: css('--text'), font: { size: 12 } }
+            }
+          }
+        }
+      });
+    }
+
+    function commonChartOptions({ stepSize, showLegend = false } = {}) {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: showLegend, labels: { color: css('--text') } },
+          tooltip: {
+            backgroundColor: css('--panel'),
+            borderColor: css('--border'),
+            borderWidth: 1,
+            titleColor: css('--text'),
+            bodyColor: css('--text')
+          }
+        },
+        scales: {
+          x: {
+            grid: { color: css('--border') + '55' },
+            ticks: { color: css('--text-dim') }
+          },
+          y: {
+            grid: { color: css('--border') + '55' },
+            ticks: { color: css('--text-dim'), stepSize: stepSize || undefined },
+            beginAtZero: true
+          }
+        }
+      };
+    }
+
+    document.getElementById('refreshBtn').onclick = () => {
+      MDG.toast('Ricarico dati…');
+      buildAll();
+    };
+
+    document.getElementById('exportBtn').onclick = async () => {
+      const events = await MDG.db.getAllEvents({ limit: 10000 });
+      const alerts = await MDG.db.getAllAlerts({ limit: 10000 });
+      const rows = [['data', 'sessioni', 'audit', 'alert', 'cambi_sicurezza']];
+      const map = {};
+      for (const e of events) {
+        const k = dateKey(e.ts);
+        if (!map[k]) map[k] = { sessioni: 0, audit: 0, alert: 0, cambi: 0 };
+        if (e.type === 'session_start') map[k].sessioni++;
+        if (e.type === 'audit_snapshot' || e.type === 'security_audit') map[k].audit++;
+      }
+      for (const a of alerts) {
+        const k = dateKey(a.ts);
+        if (!map[k]) map[k] = { sessioni: 0, audit: 0, alert: 0, cambi: 0 };
+        map[k].alert++;
+        if (a.type === 'security_change') map[k].cambi++;
+      }
+      const keys = Object.keys(map).sort();
+      for (const k of keys) {
+        rows.push([k, map[k].sessioni, map[k].audit, map[k].alert, map[k].cambi]);
+      }
+      const csv = rows.map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().slice(0,10);
+      a.href = url; a.download = `mydeviceguard-stats-${stamp}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      MDG.toast('CSV scaricato');
+    };
+
+    buildAll();
+    // auto-refresh ogni 60s per seguire i nuovi snapshot
+    setInterval(buildAll, 60000);
+  </script>
+</body>
+</html>
