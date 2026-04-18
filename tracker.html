@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Tracker</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">📍 Tracker</div>
+        <div class="sub">Sessioni registrate localmente + ricevitore P2P.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html" class="active">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+    </div>
+
+    <div class="card">
+      <h2><span id="statusDot" class="status-dot"></span>Stato tracker</h2>
+      <div class="kv"><span class="k">Device</span><span class="v" id="kvName">–</span></div>
+      <div class="kv"><span class="k">ID locale</span><span class="v mono small" id="kvId">–</span></div>
+      <div class="kv"><span class="k">Sessione iniziata</span><span class="v" id="kvStart">–</span></div>
+      <div class="kv"><span class="k">Durata</span><span class="v" id="kvDur">–</span></div>
+      <div class="kv"><span class="k">Ultimo heartbeat</span><span class="v" id="kvHb">–</span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="toggleBtn">▶️ Avvia tracking</button>
+        <button class="btn" id="auditBtn">🔍 Audit rapido</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🔗 Ricevitore P2P</h2>
+      <p class="dim">Questo device può accettare connessioni dai tuoi controller accoppiati.</p>
+      <div class="kv"><span class="k">Stato P2P</span><span class="v" id="p2pStatus"><span class="badge dim">spento</span></span></div>
+      <div class="kv"><span class="k">Peer ID corrente</span><span class="v mono small" id="p2pId">–</span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="p2pStartBtn">Attiva ricevitore</button>
+        <a href="pairing.html" class="btn">Genera QR di pairing</a>
+      </div>
+      <p class="small dim" style="margin-top:12px">
+        Canale WebRTC cifrato DTLS + cifratura applicativa AES-GCM con chiave di pairing.
+        Serve connessione solo al primo pairing per caricare la libreria P2P.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>📊 Ultime sessioni di questo device</h2>
+      <table>
+        <thead><tr><th>Quando</th><th>Tipo</th><th>Dettagli</th></tr></thead>
+        <tbody id="sessionList"><tr><td colspan="3" class="dim">Caricamento…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/security.js"></script>
+  <script src="js/peer.js"></script>
+  <script>
+    const deviceId = MDG.getOrCreateDeviceId();
+    const deviceName = MDG.getDeviceName() || 'Device senza nome';
+    const deviceKind = MDG.getDeviceKind();
+
+    document.getElementById('kvName').textContent = deviceName + ' · ' + deviceKind;
+    document.getElementById('kvId').textContent = deviceId;
+
+    // ---------- TRACKING ----------
+    let tracking = false;
+    let startTs = null;
+    let hbInterval = null;
+    const dot = document.getElementById('statusDot');
+    const btn = document.getElementById('toggleBtn');
+
+    function fmtDur(ms) {
+      const s = Math.floor(ms/1000);
+      const h = Math.floor(s/3600);
+      const m = Math.floor((s%3600)/60);
+      const sec = s%60;
+      return `${h}h ${m}m ${sec}s`;
+    }
+
+    async function startTracking() {
+      tracking = true;
+      startTs = Date.now();
+      dot.className = 'status-dot ok';
+      btn.textContent = '⏹ Ferma tracking';
+      document.getElementById('kvStart').textContent = MDG.fmtDate(startTs);
+      await MDG.db.addEvent({
+        type: 'session_start',
+        deviceId, deviceName, deviceKind,
+        userAgent: navigator.userAgent
+      });
+      MDG.security.startTypingWatcher();
+      hbInterval = setInterval(async () => {
+        document.getElementById('kvDur').textContent = fmtDur(Date.now() - startTs);
+        document.getElementById('kvHb').textContent = MDG.fmtDate(Date.now());
+        await MDG.db.addEvent({ type: 'heartbeat', deviceId, deviceName });
+        loadSessions();
+      }, 30000);
+      document.getElementById('kvDur').textContent = fmtDur(0);
+      document.getElementById('kvHb').textContent = MDG.fmtDate(Date.now());
+      loadSessions();
+      MDG.toast('Tracking avviato');
+    }
+
+    async function stopTracking() {
+      tracking = false;
+      dot.className = 'status-dot';
+      btn.textContent = '▶️ Avvia tracking';
+      clearInterval(hbInterval);
+      await MDG.db.addEvent({
+        type: 'session_end',
+        deviceId, deviceName,
+        durationMs: Date.now() - startTs
+      });
+      MDG.security.stopTypingWatcher();
+      loadSessions();
+      MDG.toast('Tracking fermato');
+    }
+
+    btn.onclick = () => tracking ? stopTracking() : startTracking();
+
+    document.getElementById('auditBtn').onclick = async () => {
+      const res = await MDG.security.runAudit();
+      const warn = res.filter(r => r.status === 'warn' || r.status === 'danger');
+      MDG.toast(`Audit: ${res.length} check, ${warn.length} avvisi`);
+    };
+
+    // ---------- LISTA SESSIONI ----------
+    async function loadSessions() {
+      const events = await MDG.db.getAllEvents({ limit: 20 });
+      const mine = events.filter(e => e.deviceId === deviceId);
+      const tbody = document.getElementById('sessionList');
+      if (!mine.length) {
+        tbody.innerHTML = '<tr><td colspan="3" class="dim">Nessuna sessione registrata.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = mine.map(e => `
+        <tr>
+          <td>${MDG.fmtRelative(e.ts)}</td>
+          <td><span class="badge info">${e.type}</span></td>
+          <td>${e.durationMs ? fmtDur(e.durationMs) : ''}</td>
+        </tr>
+      `).join('');
+    }
+    loadSessions();
+
+    // ---------- P2P HOST ----------
+    let host = null;
+    const connections = new Set();
+
+    document.getElementById('p2pStartBtn').onclick = async () => {
+      const statusEl = document.getElementById('p2pStatus');
+      const idEl = document.getElementById('p2pId');
+      if (host) {
+        host.close();
+        host = null;
+        statusEl.innerHTML = '<span class="badge dim">spento</span>';
+        idEl.textContent = '–';
+        return;
+      }
+      statusEl.innerHTML = '<span class="badge info">connessione…</span>';
+      try {
+        host = await MDG.peer.hostAsTracker({
+          onStatus: s => {
+            if (s.state === 'ready') {
+              statusEl.innerHTML = '<span class="badge ok">in ascolto</span>';
+              idEl.textContent = s.peerId;
+              // la chiave NON viene mostrata qui; si usa il QR dal pairing.
+            } else if (s.state === 'error') {
+              statusEl.innerHTML = '<span class="badge danger">errore: '+s.error+'</span>';
+            } else if (s.state === 'disconnected') {
+              statusEl.innerHTML = '<span class="badge warn">disconnesso</span>';
+            }
+          },
+          onIncoming: conn => {
+            connections.add(conn);
+            conn.onOpen = () => {
+              MDG.toast('🔗 Controller connesso');
+              MDG.db.addEvent({ type: 'controller_connected', deviceId, deviceName, peer: conn.peer });
+            };
+            conn.onMessage = async msg => {
+              if (msg.cmd === 'get_status') {
+                conn.send({
+                  type: 'status',
+                  deviceId, deviceName, deviceKind,
+                  tracking, startTs,
+                  ts: Date.now(),
+                  userAgent: navigator.userAgent
+                });
+              } else if (msg.cmd === 'get_logs') {
+                const events = await MDG.db.getAllEvents({ limit: 50 });
+                const alerts = await MDG.db.getAllAlerts({ limit: 50 });
+                conn.send({ type: 'logs', events: events.filter(e => e.deviceId === deviceId), alerts });
+              } else if (msg.cmd === 'run_audit') {
+                const r = await MDG.security.runAudit();
+                conn.send({ type: 'audit', results: r });
+              }
+            };
+            conn.onClose = () => {
+              connections.delete(conn);
+              MDG.toast('Controller disconnesso');
+            };
+          }
+        });
+      } catch (e) {
+        statusEl.innerHTML = '<span class="badge danger">errore</span>';
+        MDG.toast('Errore P2P: ' + (e.message || e));
+      }
+    };
+
+    // Stop automatico se ricarico
+    window.addEventListener('beforeunload', () => {
+      if (tracking) stopTracking();
+      if (host) host.close();
+    });
+  </script>
+</body>
+</html>

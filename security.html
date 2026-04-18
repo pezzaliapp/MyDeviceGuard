@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Security Audit</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">🔍 Security Audit</div>
+        <div class="sub">Diagnostica di sicurezza del device. Tutto locale, niente invii.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html" class="active">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+    </div>
+
+    <div class="card">
+      <h2>🧪 Esegui scansione</h2>
+      <p class="dim">Controlla permessi, storage, rete, HID, tipo di connessione, anomalie di digitazione.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="runBtn">▶️ Avvia audit</button>
+        <button class="btn" id="typingBtn">⌨️ Monitor digitazione: OFF</button>
+        <button class="btn" id="hidBtn">🔌 Ispeziona HID</button>
+      </div>
+      <p class="small dim" style="margin-top:10px">
+        Il monitor digitazione rileva raffiche di tasti anomale (tipo Rubber Ducky / BadUSB) e registra un alert locale.
+      </p>
+    </div>
+
+    <div id="resultGrid"></div>
+
+    <div class="card" id="hidCard" style="display:none">
+      <h2>🔌 Dispositivi HID</h2>
+      <table>
+        <thead><tr><th>Nome</th><th>Vendor</th><th>Product</th></tr></thead>
+        <tbody id="hidList"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>🚨 Alert recenti</h2>
+      <table>
+        <thead><tr><th>Quando</th><th>Tipo</th><th>Gravità</th><th>Descrizione</th></tr></thead>
+        <tbody id="alertList"><tr><td colspan="4" class="dim">Nessun alert.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/security.js"></script>
+  <script>
+    const runBtn = document.getElementById('runBtn');
+    const typingBtn = document.getElementById('typingBtn');
+    const hidBtn = document.getElementById('hidBtn');
+    const grid = document.getElementById('resultGrid');
+
+    function statusBadge(s) {
+      const map = { ok: 'ok', warn: 'warn', danger: 'danger', info: 'info' };
+      return `<span class="badge ${map[s] || 'dim'}">${s}</span>`;
+    }
+
+    async function renderAudit() {
+      grid.innerHTML = '<div class="card dim">Scansione in corso…</div>';
+      const res = await MDG.security.runAudit();
+      await MDG.db.addEvent({
+        type: 'security_audit',
+        deviceId: MDG.getOrCreateDeviceId(),
+        deviceName: MDG.getDeviceName(),
+        summary: {
+          total: res.length,
+          warn: res.filter(r => r.status === 'warn').length,
+          danger: res.filter(r => r.status === 'danger').length
+        }
+      });
+      grid.innerHTML = `
+        <div class="card">
+          <h2>📋 Risultati (${res.length})</h2>
+          ${res.map(r => `
+            <div class="kv">
+              <span class="k">${r.label}</span>
+              <span class="v">${statusBadge(r.status)} ${escapeHtml(r.value || '')}</span>
+            </div>
+            <div class="small dim" style="margin: -4px 0 10px">${escapeHtml(r.hint || '')}</div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    runBtn.onclick = renderAudit;
+
+    // ---------- Typing watcher toggle ----------
+    let typingOn = false;
+    typingBtn.onclick = () => {
+      if (typingOn) {
+        MDG.security.stopTypingWatcher();
+        typingOn = false;
+        typingBtn.textContent = '⌨️ Monitor digitazione: OFF';
+      } else {
+        MDG.security.startTypingWatcher();
+        typingOn = true;
+        typingBtn.textContent = '⌨️ Monitor digitazione: ON';
+        MDG.toast('Monitor attivo – digita rapidamente per testare');
+      }
+    };
+
+    // ---------- HID scan ----------
+    hidBtn.onclick = async () => {
+      const already = await MDG.security.listHidDevices();
+      let devices = already;
+      if (!devices.length) {
+        try {
+          devices = await MDG.security.requestHidDevice();
+        } catch (e) {
+          MDG.toast(e.message || 'HID non disponibile');
+          return;
+        }
+      }
+      const card = document.getElementById('hidCard');
+      const list = document.getElementById('hidList');
+      card.style.display = 'block';
+      if (!devices.length) {
+        list.innerHTML = '<tr><td colspan="3" class="dim">Nessun dispositivo HID autorizzato.</td></tr>';
+        return;
+      }
+      list.innerHTML = devices.map(d => `
+        <tr>
+          <td>${escapeHtml(d.productName || '—')}</td>
+          <td>0x${(d.vendorId || 0).toString(16)}</td>
+          <td>0x${(d.productId || 0).toString(16)}</td>
+        </tr>
+      `).join('');
+      await MDG.db.addEvent({
+        type: 'hid_scan',
+        deviceId: MDG.getOrCreateDeviceId(),
+        deviceName: MDG.getDeviceName(),
+        count: devices.length
+      });
+    };
+
+    // ---------- Alert feed ----------
+    async function refreshAlerts() {
+      const alerts = await MDG.db.getAllAlerts({ limit: 30 });
+      const tbody = document.getElementById('alertList');
+      if (!alerts.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="dim">Nessun alert.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = alerts.map(a => `
+        <tr>
+          <td>${MDG.fmtRelative(a.ts)}</td>
+          <td>${escapeHtml(a.type)}</td>
+          <td>${statusBadge(a.severity)}</td>
+          <td>${escapeHtml(a.description || '')}</td>
+        </tr>
+      `).join('');
+    }
+    refreshAlerts();
+    setInterval(refreshAlerts, 5000);
+
+    // run automatico all'apertura
+    renderAudit();
+  </script>
+</body>
+</html>

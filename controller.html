@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Controller</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">🎮 Controller</div>
+        <div class="sub">Vedi da remoto lo stato dei tuoi device accoppiati.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html" class="active">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+    </div>
+
+    <div class="card">
+      <h2>📱 I miei device accoppiati</h2>
+      <p class="dim">Scegli un device accoppiato per connetterti. Se la lista è vuota, vai su <a href="pairing.html">Pairing</a>.</p>
+      <div id="peerList" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" id="connPanel" style="display:none">
+      <h2><span id="connDot" class="status-dot"></span><span id="connTitle">Connessione</span></h2>
+      <div class="kv"><span class="k">Peer ID</span><span class="v mono small" id="connPeer">–</span></div>
+      <div class="kv"><span class="k">Stato</span><span class="v" id="connState">–</span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="btnStatus">📊 Stato device</button>
+        <button class="btn" id="btnLogs">📋 Scarica log</button>
+        <button class="btn" id="btnAudit">🔍 Esegui audit</button>
+        <button class="btn danger" id="btnDisconnect">Disconnetti</button>
+      </div>
+    </div>
+
+    <div class="card" id="resultCard" style="display:none">
+      <h2>📨 Risposta</h2>
+      <pre id="resultBody" class="mono small" style="white-space:pre-wrap;word-break:break-word;background:var(--panel-2);padding:12px;border-radius:8px;max-height:400px;overflow:auto"></pre>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/peer.js"></script>
+  <script>
+    const deviceId = MDG.getOrCreateDeviceId();
+    let currentConn = null;
+
+    async function renderPeers() {
+      const peers = await MDG.db.getAllPeers();
+      const el = document.getElementById('peerList');
+      if (!peers.length) {
+        el.innerHTML = '<div class="empty">Nessun device accoppiato.<br><br><a class="btn primary" href="pairing.html">Accoppia un device</a></div>';
+        return;
+      }
+      el.innerHTML = peers.map(p => `
+        <div class="card" style="background:var(--panel-2);margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div>
+              <strong>${escapeHtml(p.name || 'Device senza nome')}</strong>
+              <span class="badge dim">${escapeHtml(p.kind || 'device')}</span>
+              <div class="small dim mono" style="margin-top:4px">${escapeHtml(p.peerId)}</div>
+            </div>
+            <div class="btn-row" style="margin:0">
+              <button class="btn primary" data-connect="${escapeHtml(p.peerId)}">Connetti</button>
+              <button class="btn danger" data-remove="${escapeHtml(p.peerId)}">Rimuovi</button>
+            </div>
+          </div>
+        </div>
+      `).join('');
+
+      el.querySelectorAll('[data-connect]').forEach(b => b.onclick = () => connectTo(b.dataset.connect));
+      el.querySelectorAll('[data-remove]').forEach(b => b.onclick = async () => {
+        if (!confirm('Rimuovere questo pairing?')) return;
+        await MDG.db.deletePeer(b.dataset.remove);
+        renderPeers();
+      });
+    }
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function connectTo(peerId) {
+      const peers = await MDG.db.getAllPeers();
+      const p = peers.find(x => x.peerId === peerId);
+      if (!p) return;
+
+      const panel = document.getElementById('connPanel');
+      const dot = document.getElementById('connDot');
+      const state = document.getElementById('connState');
+      panel.style.display = 'block';
+      document.getElementById('connTitle').textContent = p.name || 'Device';
+      document.getElementById('connPeer').textContent = peerId;
+      dot.className = 'status-dot warn';
+      state.innerHTML = '<span class="badge warn">connessione…</span>';
+
+      try {
+        currentConn = await MDG.peer.connectAsController({
+          peerId,
+          keyB64: p.key,
+          onOpen: () => {
+            dot.className = 'status-dot ok';
+            state.innerHTML = '<span class="badge ok">connesso</span>';
+            MDG.toast('Connesso a ' + (p.name || peerId));
+          },
+          onMessage: msg => showResult(msg),
+          onClose: () => {
+            dot.className = 'status-dot danger';
+            state.innerHTML = '<span class="badge danger">chiuso</span>';
+            currentConn = null;
+          },
+          onError: e => {
+            state.innerHTML = '<span class="badge danger">errore: ' + (e.message || e) + '</span>';
+          }
+        });
+      } catch (e) {
+        state.innerHTML = '<span class="badge danger">impossibile connettersi</span>';
+        MDG.toast('Errore: ' + (e.message || e));
+      }
+    }
+
+    function showResult(obj) {
+      document.getElementById('resultCard').style.display = 'block';
+      document.getElementById('resultBody').textContent = JSON.stringify(obj, null, 2);
+    }
+
+    document.getElementById('btnStatus').onclick = () => currentConn && currentConn.send({ cmd: 'get_status' });
+    document.getElementById('btnLogs').onclick = () => currentConn && currentConn.send({ cmd: 'get_logs' });
+    document.getElementById('btnAudit').onclick = () => currentConn && currentConn.send({ cmd: 'run_audit' });
+    document.getElementById('btnDisconnect').onclick = () => {
+      if (currentConn) { currentConn.close(); currentConn = null; }
+      document.getElementById('connPanel').style.display = 'none';
+      document.getElementById('resultCard').style.display = 'none';
+    };
+
+    renderPeers();
+  </script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Log Locali</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">📋 Log Locali</div>
+        <div class="sub">Eventi e alert salvati solo su questo device (IndexedDB).</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html" class="active">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+    </div>
+
+    <div class="card">
+      <h2>🎛️ Filtri</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="search" type="search" placeholder="🔍 Cerca testo libero…" />
+        <select id="typeFilter">
+          <option value="">Tutti i tipi</option>
+        </select>
+        <button class="btn" id="csvBtn">⬇️ CSV</button>
+        <button class="btn" id="jsonBtn">⬇️ JSON</button>
+        <button class="btn danger" id="clearBtn">🗑️ Cancella log</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📊 Eventi</h2>
+      <table>
+        <thead><tr><th>Quando</th><th>Tipo</th><th>Device</th><th>Dettagli</th></tr></thead>
+        <tbody id="eventList"><tr><td colspan="4" class="dim">Caricamento…</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>🚨 Alert</h2>
+      <table>
+        <thead><tr><th>Quando</th><th>Tipo</th><th>Gravità</th><th>Descrizione</th></tr></thead>
+        <tbody id="alertList"><tr><td colspan="4" class="dim">Caricamento…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script>
+    let allEvents = [];
+    let allAlerts = [];
+
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function sev(s) {
+      const map = { ok: 'ok', warn: 'warn', danger: 'danger', info: 'info' };
+      return `<span class="badge ${map[s] || 'dim'}">${s || 'info'}</span>`;
+    }
+
+    async function load() {
+      allEvents = await MDG.db.getAllEvents({ limit: 1000 });
+      allAlerts = await MDG.db.getAllAlerts({ limit: 1000 });
+
+      // populate type filter
+      const types = Array.from(new Set(allEvents.map(e => e.type))).sort();
+      const sel = document.getElementById('typeFilter');
+      sel.innerHTML = '<option value="">Tutti i tipi</option>' +
+        types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+
+      render();
+    }
+
+    function render() {
+      const q = document.getElementById('search').value.toLowerCase();
+      const t = document.getElementById('typeFilter').value;
+
+      const filtered = allEvents.filter(e => {
+        if (t && e.type !== t) return false;
+        if (q) {
+          const s = JSON.stringify(e).toLowerCase();
+          if (!s.includes(q)) return false;
+        }
+        return true;
+      });
+
+      const tbody = document.getElementById('eventList');
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="4" class="dim">Nessun evento.</td></tr>';
+      } else {
+        tbody.innerHTML = filtered.slice(0, 200).map(e => {
+          const details = [];
+          if (e.durationMs) details.push(Math.round(e.durationMs/1000) + 's');
+          if (e.summary) details.push(JSON.stringify(e.summary));
+          if (e.count !== undefined) details.push(e.count + ' item');
+          if (e.peer) details.push('peer:' + e.peer.slice(0,8));
+          return `
+            <tr>
+              <td>${MDG.fmtDate(e.ts)}</td>
+              <td><span class="badge info">${escapeHtml(e.type)}</span></td>
+              <td>${escapeHtml(e.deviceName || '—')}</td>
+              <td>${escapeHtml(details.join(' · '))}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      const atbody = document.getElementById('alertList');
+      if (!allAlerts.length) {
+        atbody.innerHTML = '<tr><td colspan="4" class="dim">Nessun alert.</td></tr>';
+      } else {
+        atbody.innerHTML = allAlerts.slice(0, 200).map(a => `
+          <tr>
+            <td>${MDG.fmtDate(a.ts)}</td>
+            <td>${escapeHtml(a.type)}</td>
+            <td>${sev(a.severity)}</td>
+            <td>${escapeHtml(a.description || '')}</td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('typeFilter').addEventListener('change', render);
+
+    document.getElementById('csvBtn').onclick = () => {
+      const rows = [['ts','type','deviceName','deviceKind','details']];
+      allEvents.forEach(e => rows.push([
+        new Date(e.ts).toISOString(),
+        e.type || '',
+        e.deviceName || '',
+        e.deviceKind || '',
+        JSON.stringify(e).replace(/"/g, '""')
+      ]));
+      const csv = rows.map(r => r.map(f => `"${String(f).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+      download('mydeviceguard-events.csv', csv, 'text/csv;charset=utf-8');
+    };
+
+    document.getElementById('jsonBtn').onclick = () => {
+      const out = { exportedAt: new Date().toISOString(), events: allEvents, alerts: allAlerts };
+      download('mydeviceguard-export.json', JSON.stringify(out, null, 2), 'application/json');
+    };
+
+    document.getElementById('clearBtn').onclick = async () => {
+      if (!confirm('Cancellare TUTTI gli eventi e alert locali? Azione non reversibile.')) return;
+      await MDG.db.clearEvents();
+      await MDG.db.clearAlerts();
+      MDG.toast('Log cancellati');
+      load();
+    };
+
+    function download(name, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    load();
+  </script>
+</body>
+</html>

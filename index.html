@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard</title>
+  <meta name="description" content="PWA privacy-first per monitorare e auditare la sicurezza dei propri device."/>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="apple-touch-icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">🛡️ MyDeviceGuard</div>
+        <div class="sub">Monitora e auditi i tuoi device. Tutto locale. Zero cloud.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div id="onboarding" class="card" style="display:none">
+      <h2>👋 Primo avvio</h2>
+      <p class="dim">Dai un nome a questo device. Resterà solo qui, non viene mai inviato in automatico.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px">
+        <input id="deviceNameInput" type="text" placeholder="es. MacBook personale, iPhone, PC ufficio…" />
+        <select id="deviceKindInput">
+          <option value="laptop">💻 Laptop</option>
+          <option value="desktop">🖥️ Desktop</option>
+          <option value="smartphone">📱 Smartphone</option>
+          <option value="tablet">📱 Tablet</option>
+          <option value="other">🧩 Altro</option>
+        </select>
+        <button class="btn primary" id="saveDeviceBtn">Salva</button>
+      </div>
+    </div>
+
+    <div id="welcome" class="card" style="display:none">
+      <h2>Benvenuto, <span id="deviceLabel"></span></h2>
+      <p class="dim">Scegli cosa fare.</p>
+    </div>
+
+    <div class="grid">
+      <a href="tracker.html" class="card" style="text-decoration:none;color:inherit">
+        <h2>📍 Modalità Tracker</h2>
+        <p class="dim">Registra le sessioni di questo device e resta in ascolto per il controllo remoto.</p>
+      </a>
+      <a href="controller.html" class="card" style="text-decoration:none;color:inherit">
+        <h2>🎮 Modalità Controller</h2>
+        <p class="dim">Connettiti in P2P a un tuo device già accoppiato per vederne lo stato.</p>
+      </a>
+      <a href="security.html" class="card" style="text-decoration:none;color:inherit">
+        <h2>🔍 Security Audit</h2>
+        <p class="dim">Diagnostica il device: permessi, storage, rete, HID, anomalie di digitazione.</p>
+      </a>
+      <a href="logs.html" class="card" style="text-decoration:none;color:inherit">
+        <h2>📋 Log Locali</h2>
+        <p class="dim">Cronologia accessi e alert salvati solo sul device (IndexedDB).</p>
+      </a>
+      <a href="pairing.html" class="card" style="text-decoration:none;color:inherit">
+        <h2>🔗 Pairing P2P</h2>
+        <p class="dim">Accoppia i tuoi device via QR code. Canale cifrato, nessun server centrale.</p>
+      </a>
+      <div class="card">
+        <h2>⚙️ Dati e privacy</h2>
+        <p class="dim">Nessuna telemetria. Nessuna registrazione cloud. I dati restano su questo browser.</p>
+        <div class="btn-row">
+          <button class="btn" id="renameBtn">Rinomina device</button>
+          <button class="btn danger" id="wipeBtn">Cancella tutto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script>
+    const deviceId = MDG.getOrCreateDeviceId();
+    const nameEl = document.getElementById('deviceNameInput');
+    const kindEl = document.getElementById('deviceKindInput');
+    const onboarding = document.getElementById('onboarding');
+    const welcome = document.getElementById('welcome');
+    const deviceLabel = document.getElementById('deviceLabel');
+
+    function refreshState() {
+      const name = MDG.getDeviceName();
+      if (!name) {
+        onboarding.style.display = 'block';
+        welcome.style.display = 'none';
+        kindEl.value = MDG.guessDeviceKind();
+      } else {
+        onboarding.style.display = 'none';
+        welcome.style.display = 'block';
+        deviceLabel.textContent = name + ' (' + MDG.getDeviceKind() + ')';
+      }
+    }
+    refreshState();
+
+    document.getElementById('saveDeviceBtn').onclick = () => {
+      const n = nameEl.value.trim();
+      if (!n) { MDG.toast('Inserisci un nome.'); return; }
+      MDG.setDeviceName(n);
+      MDG.setDeviceKind(kindEl.value);
+      MDG.db.addEvent({
+        type: 'device_registered',
+        deviceId, deviceName: n, deviceKind: kindEl.value,
+        userAgent: navigator.userAgent
+      });
+      MDG.toast('✅ Device registrato');
+      refreshState();
+    };
+
+    document.getElementById('renameBtn').onclick = () => {
+      const current = MDG.getDeviceName();
+      const v = prompt('Nuovo nome per questo device:', current);
+      if (v && v.trim()) {
+        MDG.setDeviceName(v.trim());
+        MDG.toast('Nome aggiornato');
+        refreshState();
+      }
+    };
+
+    document.getElementById('wipeBtn').onclick = async () => {
+      if (!confirm('Cancellare TUTTI i dati locali (eventi, alert, peer, nome device)?')) return;
+      await MDG.db.clearEvents();
+      await MDG.db.clearAlerts();
+      const peers = await MDG.db.getAllPeers();
+      for (const p of peers) await MDG.db.deletePeer(p.peerId);
+      localStorage.removeItem('mdg.deviceName');
+      localStorage.removeItem('mdg.deviceKind');
+      localStorage.removeItem('mdg.deviceId');
+      MDG.toast('Tutti i dati locali cancellati');
+      setTimeout(() => location.reload(), 800);
+    };
+  </script>
+</body>
+</html>

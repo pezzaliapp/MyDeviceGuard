@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Pairing</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <div class="logo">🔗 Pairing</div>
+        <div class="sub">Accoppia i tuoi device in P2P. Cifrato end-to-end.</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html" class="active">🔗 Pairing</a>
+    </div>
+
+    <div class="card">
+      <h2>📤 Modalità "device da controllare"</h2>
+      <p class="dim">Esegui su questa pagina dal device che vuoi essere monitorato (es. laptop). Mostra il QR e scansionalo dall'altro device entro pochi minuti.</p>
+      <div class="btn-row">
+        <button class="btn primary" id="genBtn">Genera codice di pairing</button>
+      </div>
+      <div id="qrWrap" style="display:none;margin-top:16px">
+        <div id="qrContainer"></div>
+        <div style="margin-top:12px" class="small dim">Oppure copia manualmente questo codice:</div>
+        <textarea id="codeText" readonly style="width:100%;height:80px;margin-top:6px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px"></textarea>
+        <div class="btn-row">
+          <button class="btn" id="copyBtn">📋 Copia</button>
+          <button class="btn danger" id="cancelBtn">Annulla</button>
+        </div>
+        <div class="kv"><span class="k">Stato</span><span class="v" id="genStatus"><span class="badge warn">in attesa…</span></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📥 Modalità "controller"</h2>
+      <p class="dim">Esegui su questa pagina dal device con cui vuoi controllare l'altro (es. smartphone). Incolla il codice generato sopra.</p>
+      <textarea id="pasteCode" placeholder="Incolla qui il codice JSON generato dall'altro device…" style="width:100%;height:100px;background:var(--panel-2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:var(--mono);font-size:12px"></textarea>
+      <div style="margin-top:10px">
+        <input id="peerName" type="text" placeholder="Nome da dare a questo pairing (es. MacBook di casa)" />
+        <select id="peerKind">
+          <option value="laptop">💻 Laptop</option>
+          <option value="desktop">🖥️ Desktop</option>
+          <option value="smartphone">📱 Smartphone</option>
+          <option value="tablet">📱 Tablet</option>
+          <option value="other">🧩 Altro</option>
+        </select>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="pairBtn">Accoppia</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📚 Device accoppiati</h2>
+      <div id="peerList"></div>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/peer.js"></script>
+  <!-- QR code library (CDN, cachata dal service worker dopo il primo caricamento) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script>
+    const genBtn = document.getElementById('genBtn');
+    const qrWrap = document.getElementById('qrWrap');
+    const qrContainer = document.getElementById('qrContainer');
+    const codeText = document.getElementById('codeText');
+    const genStatus = document.getElementById('genStatus');
+
+    let host = null;
+    let currentCode = null;
+
+    genBtn.onclick = async () => {
+      genBtn.disabled = true;
+      genStatus.innerHTML = '<span class="badge warn">inizializzazione P2P…</span>';
+      try {
+        host = await MDG.peer.hostAsTracker({
+          onStatus: s => {
+            if (s.state === 'ready') {
+              currentCode = JSON.stringify({
+                v: 1,
+                peerId: s.peerId,
+                key: s.key,
+                name: MDG.getDeviceName() || 'Device',
+                kind: MDG.getDeviceKind()
+              });
+              codeText.value = currentCode;
+              qrWrap.style.display = 'block';
+              genStatus.innerHTML = '<span class="badge ok">pronto – scansiona dal controller</span>';
+              // render QR
+              qrContainer.innerHTML = '';
+              QRCode.toCanvas(currentCode, { width: 280, margin: 1 }, (err, canvas) => {
+                if (err) { qrContainer.innerHTML = '<div class="dim">QR non disponibile (usa copia-incolla)</div>'; return; }
+                qrContainer.appendChild(canvas);
+              });
+            } else if (s.state === 'error') {
+              genStatus.innerHTML = '<span class="badge danger">errore: ' + s.error + '</span>';
+              genBtn.disabled = false;
+            }
+          },
+          onIncoming: conn => {
+            conn.onOpen = () => {
+              genStatus.innerHTML = '<span class="badge ok">controller connesso ✓</span>';
+              MDG.toast('🔗 Pairing completato');
+            };
+            conn.onMessage = msg => {
+              if (msg.cmd === 'get_status') {
+                conn.send({
+                  type: 'status',
+                  deviceName: MDG.getDeviceName(),
+                  deviceKind: MDG.getDeviceKind(),
+                  ts: Date.now()
+                });
+              }
+            };
+          }
+        });
+      } catch (e) {
+        genStatus.innerHTML = '<span class="badge danger">errore: ' + (e.message || e) + '</span>';
+        genBtn.disabled = false;
+      }
+    };
+
+    document.getElementById('copyBtn').onclick = () => {
+      codeText.select();
+      navigator.clipboard.writeText(codeText.value).then(() => MDG.toast('Copiato'));
+    };
+
+    document.getElementById('cancelBtn').onclick = () => {
+      if (host) { host.close(); host = null; }
+      qrWrap.style.display = 'none';
+      genBtn.disabled = false;
+    };
+
+    // ---------- PAIR FROM CODE ----------
+    document.getElementById('pairBtn').onclick = async () => {
+      const raw = document.getElementById('pasteCode').value.trim();
+      if (!raw) { MDG.toast('Incolla il codice'); return; }
+      let data;
+      try { data = JSON.parse(raw); }
+      catch (e) { MDG.toast('Codice non valido'); return; }
+      if (!data.peerId || !data.key) { MDG.toast('Codice incompleto'); return; }
+
+      const name = document.getElementById('peerName').value.trim() || data.name || 'Device';
+      const kind = document.getElementById('peerKind').value || data.kind || 'other';
+
+      MDG.toast('Tentativo di connessione…');
+      try {
+        const conn = await MDG.peer.connectAsController({
+          peerId: data.peerId,
+          keyB64: data.key,
+          onOpen: () => MDG.toast('Canale aperto – salvo pairing'),
+          onMessage: () => {},
+          onError: e => MDG.toast('Errore: ' + (e.message || e))
+        });
+        // test round-trip
+        conn.send({ cmd: 'get_status' });
+
+        await MDG.db.savePeer({
+          peerId: data.peerId,
+          key: data.key,
+          name, kind,
+          addedAt: Date.now()
+        });
+        await MDG.db.addEvent({ type: 'peer_paired', deviceId: MDG.getOrCreateDeviceId(), peer: data.peerId, peerName: name });
+        MDG.toast('✅ Device accoppiato');
+        document.getElementById('pasteCode').value = '';
+        document.getElementById('peerName').value = '';
+        renderList();
+        setTimeout(() => conn.close(), 1500);
+      } catch (e) {
+        MDG.toast('Impossibile connettersi: ' + (e.message || e));
+      }
+    };
+
+    // ---------- LISTA ----------
+    async function renderList() {
+      const peers = await MDG.db.getAllPeers();
+      const el = document.getElementById('peerList');
+      if (!peers.length) { el.innerHTML = '<div class="empty">Nessun device accoppiato.</div>'; return; }
+      el.innerHTML = peers.map(p => `
+        <div class="kv">
+          <span class="k">${escapeHtml(p.name)} <span class="badge dim">${escapeHtml(p.kind)}</span></span>
+          <span class="v small mono">${escapeHtml(p.peerId)} <button class="btn danger" data-rm="${escapeHtml(p.peerId)}" style="padding:4px 10px;margin-left:8px">×</button></span>
+        </div>
+      `).join('');
+      el.querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => {
+        if (!confirm('Rimuovere pairing?')) return;
+        await MDG.db.deletePeer(b.dataset.rm);
+        renderList();
+      });
+    }
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    renderList();
+
+    window.addEventListener('beforeunload', () => { if (host) host.close(); });
+  </script>
+</body>
+</html>
