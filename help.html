@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>MyDeviceGuard – Manuale</title>
+  <meta name="theme-color" content="#0b0f14" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon/mydeviceguard-192.png" />
+  <link rel="stylesheet" href="css/style.css" />
+  <style>
+    .manual h2 { margin-top: 0; font-size: 18px; color: var(--accent); }
+    .manual h3 { margin-top: 20px; color: var(--text); font-size: 15px; text-transform: none; letter-spacing: 0; }
+    .manual p, .manual li { line-height: 1.7; }
+    .manual ol, .manual ul { padding-left: 24px; }
+    .manual li { margin-bottom: 6px; }
+    .toc { columns: 2; column-gap: 24px; font-size: 14px; }
+    .toc a { display: block; padding: 4px 0; break-inside: avoid; }
+    @media (max-width: 600px) { .toc { columns: 1; } }
+    .note {
+      background: rgba(0, 227, 148, 0.08);
+      border-left: 3px solid var(--accent);
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .warn-box {
+      background: rgba(255, 184, 77, 0.08);
+      border-left: 3px solid var(--warn);
+      padding: 10px 14px;
+      margin: 14px 0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    .manual code {
+      background: var(--panel-2);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.92em;
+    }
+    .step {
+      counter-reset: step;
+    }
+    .step > li {
+      counter-increment: step;
+      list-style: none;
+      position: relative;
+      padding-left: 36px;
+      margin-bottom: 12px;
+    }
+    .step > li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0; top: 0;
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #061b12;
+      font-family: var(--mono);
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+    }
+    .back-top {
+      text-align: right;
+      font-size: 13px;
+      margin-top: 20px;
+      opacity: 0.7;
+    }
+    .back-top a { color: var(--text-dim); }
+    h2[id] { scroll-margin-top: 16px; }
+    h3[id] { scroll-margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="wrap manual">
+    <div class="header">
+      <div>
+        <div class="logo">📖 Manuale</div>
+        <div class="sub">Guida completa all'uso di MyDeviceGuard</div>
+      </div>
+      <button class="icon-btn" onclick="MDG.toggleTheme()" title="Cambia tema">🌓</button>
+    </div>
+
+    <div class="nav">
+      <a href="index.html">🏠 Home</a>
+      <a href="tracker.html">📍 Tracker</a>
+      <a href="controller.html">🎮 Controller</a>
+      <a href="security.html">🔍 Security</a>
+      <a href="logs.html">📋 Log</a>
+      <a href="pairing.html">🔗 Pairing</a>
+      <a href="backup.html">💾 Backup</a>
+      <a href="stats.html">📊 Stats</a>
+      <a href="help.html" class="active">📖 Manuale</a>
+    </div>
+
+    <div class="card" id="top">
+      <h2>🧭 Indice</h2>
+      <div class="toc">
+        <a href="#cos-e">1. Cos'è MyDeviceGuard</a>
+        <a href="#privacy">2. Privacy: come funziona davvero</a>
+        <a href="#primo-avvio">3. Primo avvio</a>
+        <a href="#installare">4. Installare la PWA come app</a>
+        <a href="#concetti">5. Concetti chiave</a>
+        <a href="#home">6. La schermata Home</a>
+        <a href="#tracker">7. Tracker</a>
+        <a href="#security">8. Security Audit</a>
+        <a href="#audit-sched">9. Audit schedulato</a>
+        <a href="#notifiche">10. Notifiche push</a>
+        <a href="#hid">11. Whitelist HID</a>
+        <a href="#pairing">12. Pairing P2P</a>
+        <a href="#controller">13. Controller (controllo remoto)</a>
+        <a href="#log">14. Log locali</a>
+        <a href="#stats">15. Statistiche</a>
+        <a href="#backup">16. Backup cifrato</a>
+        <a href="#scenari">17. Scenari d'uso</a>
+        <a href="#faq">18. Domande frequenti</a>
+        <a href="#troubleshooting">19. Risoluzione problemi</a>
+        <a href="#sicurezza">20. Nota tecnica sulla sicurezza</a>
+      </div>
+    </div>
+
+    <!-- ===================== 1. COS'È ===================== -->
+    <div class="card">
+      <h2 id="cos-e">1. Cos'è MyDeviceGuard</h2>
+      <p>MyDeviceGuard è una <strong>Progressive Web App</strong> (PWA) pensata per tenere sotto controllo la sicurezza dei tuoi device personali: laptop, desktop, smartphone, tablet. Si installa dal browser come una qualunque app e funziona offline, senza account e senza cloud.</p>
+      <p>Le funzioni principali sono quattro:</p>
+      <ul>
+        <li><strong>Tracker</strong>: registra ogni volta che il device viene attivato, tiene un diario locale dei tuoi accessi.</li>
+        <li><strong>Security Audit</strong>: diagnostica lo stato di sicurezza del browser/device in 20+ punti (HTTPS, permessi, storage, rete, dispositivi HID, ecc.) e ti avvisa se qualcosa cambia nel tempo.</li>
+        <li><strong>Controller remoto P2P</strong>: dal telefono puoi vedere in tempo reale lo stato del laptop, scaricare i suoi log, lanciare un audit. La comunicazione è peer-to-peer e cifrata end-to-end.</li>
+        <li><strong>Backup cifrato</strong>: esporta tutti i tuoi dati in un file protetto da password per sicurezza o migrazione.</li>
+      </ul>
+      <div class="note">
+        💡 <strong>Chi dovrebbe usarla.</strong> Chiunque voglia avere una dashboard personale, sempre a portata di mano, per monitorare se il proprio device è stato manipolato, se ha permessi attivi che non dovrebbe avere, o per tenere traccia di quando viene usato.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 2. PRIVACY ===================== -->
+    <div class="card">
+      <h2 id="privacy">2. Privacy: come funziona davvero</h2>
+      <p>Questo è forse il punto più importante del manuale. MyDeviceGuard è stato progettato con un principio non negoziabile: <strong>i tuoi dati non devono lasciare il tuo device</strong>.</p>
+      <h3>Dove stanno i tuoi dati</h3>
+      <p>Tutto quello che fai — sessioni del tracker, risultati degli audit, alert di sicurezza, dispositivi HID approvati, device remoti accoppiati — viene salvato esclusivamente nella memoria del tuo browser, in due strutture chiamate <code>IndexedDB</code> e <code>localStorage</code>. Sono spazi locali che appartengono a te e a questo browser, come fossero una cartella privata nel disco.</p>
+      <p>Quando disinstalli la PWA o "cancelli dati sito" dalle impostazioni browser, tutti i dati spariscono dal tuo device. Non esistono altrove.</p>
+      <h3>Cosa NON facciamo</h3>
+      <ul>
+        <li>Nessuna telemetria, nessun analytics, nessun cookie di tracciamento.</li>
+        <li>Nessun account utente, nessuna email richiesta, nessun login.</li>
+        <li>Nessun server applicativo raccoglie i tuoi dati.</li>
+        <li>Nessun backend può "vedere" cosa fai.</li>
+      </ul>
+      <h3>Le uniche tre eccezioni al "tutto locale"</h3>
+      <ol>
+        <li><strong>Il server che ospita l'app</strong> ti manda i file HTML/JS/CSS la prima volta che apri il link. Dopo il service worker li tiene in cache e il server non sa più se, quando o come usi la PWA.</li>
+        <li><strong>Signaling P2P</strong>: quando accoppi due device via WebRTC, un server pubblico di terze parti (PeerJS) fa da "centralino" solo per mettere in contatto i due peer. I dati dell'applicazione non passano da lì, e comunque sono cifrati due volte (DTLS a livello trasporto + AES-GCM a livello applicativo con chiave generata al pairing).</li>
+        <li><strong>Server STUN/TURN</strong> di Google per aiutare il WebRTC a superare i NAT. Anche qui, nessun dato applicativo.</li>
+      </ol>
+      <div class="note">
+        🛡️ <strong>In sintesi:</strong> nemmeno io, che ho scritto il codice, posso vedere nulla di quello che fai. Se vuoi la certezza totale, puoi clonare il repository GitHub, fare il tuo deploy e usare solo il tuo server.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 3. PRIMO AVVIO ===================== -->
+    <div class="card">
+      <h2 id="primo-avvio">3. Primo avvio</h2>
+      <p>La prima volta che apri MyDeviceGuard, la schermata Home ti chiede due cose:</p>
+      <ol class="step">
+        <li><strong>Un nome per questo device.</strong> Ad esempio "MacBook personale", "iPhone", "PC ufficio". Questo nome è visibile solo a te e serve a distinguere i tuoi dispositivi quando li accoppi tra loro.</li>
+        <li><strong>Il tipo di device</strong> (laptop, desktop, smartphone, tablet, altro). Puro valore descrittivo, nessuna conseguenza tecnica.</li>
+      </ol>
+      <p>Cliccando <strong>Salva</strong> viene creato automaticamente anche un identificativo univoco locale (UUID) che accompagnerà i log di questo device. Non è condiviso con nessuno in automatico — viaggia solo se tu lo esporti tramite backup o se ti connetti via P2P a un tuo altro device.</p>
+      <p>Puoi cambiare il nome in qualsiasi momento dalla card "Dati e privacy" in basso a destra nella Home, con il bottone <strong>Rinomina device</strong>.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 4. INSTALLARE ===================== -->
+    <div class="card">
+      <h2 id="installare">4. Installare la PWA come app</h2>
+      <p>MyDeviceGuard funziona in due modalità: come <strong>pagina web</strong> aperta dal browser, o come <strong>app installata</strong> sulla schermata Home / Dock / menu Start. La seconda è nettamente consigliata perché sblocca funzionalità come le notifiche, un'icona dedicata, finestra senza barra URL, e avvio rapido.</p>
+
+      <h3>Su iPhone / iPad</h3>
+      <ol class="step">
+        <li>Apri il link della PWA in <strong>Safari</strong> (importante: Safari, non Chrome, perché iOS permette l'installazione completa solo da Safari).</li>
+        <li>Tocca il bottone <strong>Condividi</strong> (quadrato con freccia in alto).</li>
+        <li>Scorri e tocca <strong>Aggiungi alla schermata Home</strong>.</li>
+        <li>Conferma il nome "MyDeviceGuard" e tocca <strong>Aggiungi</strong>.</li>
+      </ol>
+      <p>Da ora in poi trovi l'icona dello scudo sulla home dell'iPhone. Aprendola da lì, la PWA parte a schermo intero senza la barra di Safari.</p>
+      <div class="warn-box">
+        ⚠️ <strong>Importante per iPhone:</strong> le notifiche push funzionano <em>solo</em> se apri la PWA dalla schermata Home (modalità standalone). Se la apri in Safari come sito web normale, le notifiche non sono disponibili. Richiede iOS 16.4 o superiore.
+      </div>
+
+      <h3>Su Mac (Chrome, Edge, Brave)</h3>
+      <ol class="step">
+        <li>Apri il link della PWA in Chrome (o altro browser basato su Chromium).</li>
+        <li>Nella barra degli indirizzi, a destra, clicca sull'icona "Installa" (un computer con una freccia verso il basso).</li>
+        <li>In alternativa: menu a tre puntini → <strong>Cast, salva e condividi</strong> → <strong>Installa pagina come app</strong>.</li>
+        <li>Conferma.</li>
+      </ol>
+      <p>L'app appare nel Launchpad, puoi trascinarla nel Dock, cercarla con Spotlight. Si comporta come una qualsiasi app nativa.</p>
+
+      <h3>Su Android (Chrome)</h3>
+      <ol class="step">
+        <li>Apri il link in Chrome.</li>
+        <li>In molti casi compare in automatico un banner "Aggiungi MyDeviceGuard alla schermata Home" — conferma.</li>
+        <li>Altrimenti menu a tre puntini → <strong>Installa app</strong>.</li>
+      </ol>
+
+      <h3>Su Windows (Chrome, Edge)</h3>
+      <ol class="step">
+        <li>Apri il link in Chrome/Edge.</li>
+        <li>Icona "Installa" nella barra degli indirizzi.</li>
+        <li>L'app appare nel menu Start e puoi bloccarla nella barra delle applicazioni.</li>
+      </ol>
+
+      <div class="note">
+        💡 <strong>Scegli un solo browser per l'installazione.</strong> Se installi la PWA sia da Safari che da Chrome, avrai due installazioni separate con database separati. È comodo se vuoi profili distinti, confusionario se non è intenzionale.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 5. CONCETTI CHIAVE ===================== -->
+    <div class="card">
+      <h2 id="concetti">5. Concetti chiave</h2>
+      <p>Per usare bene la PWA aiuta conoscere quattro concetti.</p>
+      <h3>Device</h3>
+      <p>Ogni installazione della PWA su un browser specifico rappresenta un "device" a sé, con nome, ID e log propri. Il tuo MacBook visto da Safari e lo stesso MacBook visto da Chrome sono due device diversi per MyDeviceGuard, perché i dati sono separati per browser. Questo è un limite del modello PWA, non una scelta nostra.</p>
+      <h3>Tracker</h3>
+      <p>È il "registro" di questo device. Quando avvii il Tracker, la PWA inizia a scrivere un evento ogni 30 secondi (heartbeat) più altri eventi speciali. È utile per avere prova di quando il device è stato aperto/attivato. Funziona come un diario.</p>
+      <h3>Controller</h3>
+      <p>È la "vista remota" che usi da un altro device. Se il tuo iPhone è accoppiato al tuo laptop (vedi Pairing), dal Controller puoi chiedere al laptop "fammi vedere il tuo stato", "scaricami i tuoi log", "esegui un audit". Il laptop risponde solo se ha una pagina della PWA aperta in quel momento.</p>
+      <h3>Pairing P2P</h3>
+      <p>È l'operazione che crea un legame cifrato tra due tuoi device. Avviene una volta sola, tramite QR code. Dopo il pairing i due device si riconoscono sempre e comunicano in modo cifrato end-to-end.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 6. HOME ===================== -->
+    <div class="card">
+      <h2 id="home">6. La schermata Home</h2>
+      <p>La Home è il punto di partenza. Dopo l'onboarding mostra una griglia di card, ciascuna è una sezione dell'app. Sulla card Security Audit compare in tempo reale un piccolo badge con lo stato dell'ultimo audit (es. <em>"10m fa · 2 avvisi"</em>), così vedi a colpo d'occhio se c'è qualcosa di nuovo.</p>
+      <p>In basso a destra, la card <strong>Dati e privacy</strong> contiene due azioni:</p>
+      <ul>
+        <li><strong>Rinomina device</strong>: cambia il nome che identifica questo device.</li>
+        <li><strong>Cancella tutto</strong>: azzera completamente tutti i dati locali. Attenzione: non è reversibile. Usa la funzione Backup prima, se vuoi conservarli.</li>
+      </ul>
+      <p>In alto a destra, l'icona luna/sole permette di alternare tema chiaro e scuro. La scelta è persistente.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 7. TRACKER ===================== -->
+    <div class="card">
+      <h2 id="tracker">7. Tracker</h2>
+      <p>La pagina Tracker è composta di tre sezioni.</p>
+      <h3>Stato tracker</h3>
+      <p>Mostra nome e ID del device, quando è stata avviata la sessione corrente, la durata, l'ultimo heartbeat. Con il bottone <strong>Avvia tracking</strong> inizi a registrare: da quel momento, ogni 30 secondi la PWA scrive un heartbeat nei log. Quando premi <strong>Ferma tracking</strong> viene registrata la durata totale della sessione.</p>
+      <p>Il bottone <strong>Audit rapido</strong> esegue un controllo di sicurezza al volo, senza aprire la pagina Security.</p>
+
+      <h3>Ricevitore P2P</h3>
+      <p>Serve se vuoi che questo device sia <em>controllabile da remoto</em>. Cliccando <strong>Attiva ricevitore</strong>, la PWA genera un Peer ID e resta in ascolto. Da questo momento gli altri tuoi device accoppiati possono collegarsi via Controller e interrogare questo.</p>
+      <p>In alternativa, c'è il collegamento a <strong>Genera QR di pairing</strong> se devi ancora accoppiare un nuovo device.</p>
+
+      <h3>Ultime sessioni di questo device</h3>
+      <p>Tabella riepilogativa degli ultimi 20 eventi registrati sul device. Utile per controllare a colpo d'occhio cosa è stato registrato.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 8. SECURITY AUDIT ===================== -->
+    <div class="card">
+      <h2 id="security">8. Security Audit</h2>
+      <p>Questa è la sezione più importante per la sicurezza. Clicca <strong>Avvia audit</strong> per eseguire un controllo completo del tuo browser/device. La PWA genera una lista di 20+ check con quattro possibili esiti:</p>
+      <ul>
+        <li><strong>ok</strong> (verde): il check è passato, situazione normale.</li>
+        <li><strong>info</strong> (blu): informazione neutra, nessun problema.</li>
+        <li><strong>warn</strong> (giallo): avviso, non grave ma da notare.</li>
+        <li><strong>danger</strong> (rosso): situazione critica, verifica immediatamente.</li>
+      </ul>
+
+      <h3>Cosa viene controllato</h3>
+      <ul>
+        <li><strong>Contesto sicuro</strong>: la pagina è servita su HTTPS? (richiesto per funzioni sensibili)</li>
+        <li><strong>Service Worker</strong>: è registrato? (necessario per offline e notifiche)</li>
+        <li><strong>Storage persistente</strong>: il browser ha promesso di non cancellare i tuoi dati?</li>
+        <li><strong>Permessi</strong>: camera, microfono, geolocalizzazione, notifiche, clipboard... La PWA ti dice quali sono attivi.</li>
+        <li><strong>Rete</strong>: tipo di connessione (3G/4G/5G/Wi-Fi), eventuale Data Saver.</li>
+        <li><strong>Batteria, CPU, memoria</strong>.</li>
+        <li><strong>WebHID e WebUSB</strong>: supportati? Quali device autorizzati?</li>
+        <li><strong>User-Agent Client Hints</strong>: piattaforma e architettura reali del device.</li>
+      </ul>
+
+      <h3>Monitor digitazione</h3>
+      <p>Toggle <strong>⌨️ Monitor digitazione: OFF / ON</strong>. Quando attivo, la PWA conta quanti tasti premi al secondo. Se supera una soglia molto alta (15 tasti/secondo, ben oltre anche un dattilografo veloce), registra un alert perché potrebbe essere il sintomo di un attacco con <em>Rubber Ducky</em> o <em>BadUSB</em> (dispositivi USB che fingono di essere tastiere per iniettare comandi rapidissimi).</p>
+
+      <h3>Ispeziona HID</h3>
+      <p>Bottone <strong>🔌 Ispeziona HID</strong>: enumera i dispositivi HID (tastiere, mouse, gamepad, lettori codici) che hai autorizzato al browser. È il punto di partenza per popolare la <a href="#hid">whitelist HID</a>.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 9. AUDIT SCHEDULATO ===================== -->
+    <div class="card">
+      <h2 id="audit-sched">9. Audit schedulato</h2>
+      <p>Un audit fatto ogni tanto a mano è utile, ma l'audit <em>automatico periodico</em> è molto più potente: fa confronti nel tempo e ti avvisa se qualcosa cambia.</p>
+      <p>Nella card <strong>⏱️ Audit schedulato</strong> trovi:</p>
+      <ul>
+        <li><strong>Stato</strong>: attivo o disattivo (default: disattivo, lo devi accendere tu).</li>
+        <li><strong>Ultimo audit</strong>: quanto tempo fa e quanti avvisi.</li>
+        <li><strong>Frequenza</strong>: da 15 min a 12 ore.</li>
+        <li><strong>Attiva / Disattiva</strong>: accende o spegne il meccanismo.</li>
+        <li><strong>Esegui adesso</strong>: forza un audit immediato.</li>
+      </ul>
+      <h3>Come funziona il rilevamento cambi</h3>
+      <p>Ogni volta che parte l'audit schedulato, il sistema confronta il risultato con l'ultimo snapshot. Se rileva differenze — un permesso passato da "prompt" a "granted", HTTPS disattivato, un nuovo HID comparso, ecc. — genera automaticamente un alert nel log e, se hai concesso le notifiche, fa apparire una notifica di sistema.</p>
+      <p>Esempio pratico: ieri la PWA non aveva accesso alla fotocamera. Oggi tu hai concesso il permesso (magari distrattamente, magari qualcun altro ha toccato il tuo Mac). Al prossimo audit schedulato, MyDeviceGuard ti avvisa: <em>"perm_camera: info:prompt → warn:granted"</em>. Sta a te decidere se era voluto o no.</p>
+      <div class="note">
+        💡 <strong>Privacy e background.</strong> L'audit schedulato gira solo quando la PWA è aperta (in qualche tab o come app installata). Non può spiare silenziosamente il device: se chiudi tutto, si ferma. Quando torni sulla PWA e sono passati più minuti dell'intervallo, parte un audit "di recupero" immediatamente.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 10. NOTIFICHE ===================== -->
+    <div class="card">
+      <h2 id="notifiche">10. Notifiche push locali</h2>
+      <p>Le notifiche sono <strong>locali</strong>: è la PWA stessa a decidere quando mostrarle, non c'è nessun server esterno che ti manda push. Appaiono nel centro notifiche del sistema operativo (Mac, iOS, Android, Windows, Linux) con titolo, corpo e icona.</p>
+
+      <h3>Abilitare le notifiche</h3>
+      <ol class="step">
+        <li>Vai su Security.</li>
+        <li>Card <strong>🔔 Notifiche push locali</strong>.</li>
+        <li>Clicca <strong>Abilita notifiche</strong>. Il browser mostrerà un prompt di sistema: concedi.</li>
+        <li>Il badge "Permesso" diventa <em>concesso</em>.</li>
+        <li>Clicca <strong>🧪 Invia test</strong> per verificare che la notifica appaia davvero.</li>
+      </ol>
+
+      <h3>Livelli di filtro</h3>
+      <ul>
+        <li><strong>Nessuna</strong>: non mandare niente.</li>
+        <li><strong>Solo critici</strong>: solo alert di gravità <code>danger</code>.</li>
+        <li><strong>Avvisi e critici</strong> (default): entrambi.</li>
+        <li><strong>Tutte</strong>: anche info e debug.</li>
+      </ul>
+
+      <h3>Se hai negato per sbaglio</h3>
+      <p>Una volta che il browser ha ricevuto un "no", non chiede più. Devi entrare manualmente nelle impostazioni del sito e riconsentire:</p>
+      <ul>
+        <li><strong>Chrome</strong>: lucchetto a sinistra dell'URL → Impostazioni sito → Notifiche → Consenti.</li>
+        <li><strong>Safari macOS</strong>: Safari → Preferenze → Siti web → Notifiche → cerca il sito.</li>
+        <li><strong>Safari iOS</strong>: Impostazioni iOS → Notifiche → scorri fino a trovare l'icona della PWA installata.</li>
+        <li><strong>Firefox</strong>: icona lucchetto → Autorizzazioni → Invio notifiche.</li>
+      </ul>
+
+      <div class="warn-box">
+        ⚠️ <strong>iPhone:</strong> le notifiche funzionano solo se la PWA è installata sulla schermata Home (iOS 16.4+). In Safari web normale non sono disponibili.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 11. HID WHITELIST ===================== -->
+    <div class="card">
+      <h2 id="hid">11. Whitelist HID</h2>
+      <p>HID (Human Interface Device) è la categoria USB che include tastiere, mouse, gamepad, lettori di codici. Un attacco classico è collegare una finta tastiera USB (Rubber Ducky, BadUSB, Flipper Zero) al computer per iniettare comandi. MyDeviceGuard ha una whitelist che ti avvisa se nuovi HID appaiono.</p>
+
+      <h3>Come si popola la whitelist</h3>
+      <p>A causa dei limiti delle API WebHID, la PWA vede solo i device per cui il browser ha ricevuto permesso esplicito. Quindi la prima volta devi "presentargli" i tuoi dispositivi fidati:</p>
+      <ol class="step">
+        <li>Security → card <strong>🔒 Whitelist HID</strong>.</li>
+        <li>Clicca <strong>➕ Aggiungi dispositivo…</strong></li>
+        <li>Il browser mostra un popup con la lista dei device disponibili. Seleziona la tua tastiera (o mouse) e conferma.</li>
+        <li>Ora nella tabella superiore "Dispositivi HID rilevati" compare con stato <em>ignota</em>.</li>
+        <li>Clicca <strong>✅ Approva</strong> e dai un nickname (es. "Tastiera MacBook").</li>
+        <li>Lo stato diventa <em>nota</em>.</li>
+        <li>Ripeti per ogni HID che usi regolarmente.</li>
+      </ol>
+
+      <h3>Attivare il watch</h3>
+      <p>Cliccando <strong>Attiva watch</strong>, il controllo HID diventa parte dell'audit schedulato. Se qualche HID non in whitelist compare (perché qualcuno ha autorizzato un device al browser, per esempio), scatta un alert <code>danger</code> e, se abilitata, una notifica push "🚨 Nuovo dispositivo HID".</p>
+
+      <h3>Gestire la whitelist</h3>
+      <p>Sotto la card puoi vedere la lista degli HID approvati. Ogni voce ha un'icona ✏️ per rinominare e × per rimuovere. Un HID rimosso tornerà "ignoto" al prossimo scan.</p>
+
+      <div class="note">
+        💡 Il sistema non è perfetto: un attaccante che ha accesso fisico al Mac può ancora collegare una tastiera e iniettare comandi prima che tu autorizzi il browser. Il valore di questa feature è nel <em>rilevamento post-factum</em>: se al risveglio vedi un HID nuovo, hai un indizio chiaro.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 12. PAIRING ===================== -->
+    <div class="card">
+      <h2 id="pairing">12. Pairing P2P</h2>
+      <p>Il pairing collega due tuoi device in modo che possano comunicare direttamente, cifrati end-to-end, senza che nessun server veda i contenuti.</p>
+
+      <h3>Pairing completo passo-passo</h3>
+      <p>Supponiamo tu voglia accoppiare <strong>MacBook</strong> (lo chiamerò "device A") e <strong>iPhone</strong> (device B).</p>
+
+      <h4>Lato MacBook (device da controllare)</h4>
+      <ol class="step">
+        <li>Apri la PWA sul Mac e vai su <strong>Pairing</strong>.</li>
+        <li>Clicca <strong>Genera codice di pairing</strong>.</li>
+        <li>Appare un QR code e il testo del codice nella textarea sotto.</li>
+        <li>Non chiudere questa pagina. Il Mac resta in ascolto finché non completi l'accoppiamento dall'altro lato.</li>
+      </ol>
+
+      <h4>Lato iPhone (controller)</h4>
+      <ol class="step">
+        <li>Apri la fotocamera nativa dell'iPhone (o il lettore QR del Centro di Controllo).</li>
+        <li>Inquadra il QR mostrato sul Mac.</li>
+        <li>Appare una notifica gialla con l'URL di MyDeviceGuard — tocca.</li>
+        <li>Il browser si apre direttamente sulla pagina Pairing con un banner verde <strong>"📲 Codice di pairing ricevuto"</strong>.</li>
+        <li>Rivedi il nome (puoi cambiarlo, es. "MacBook di casa"), poi tocca <strong>✅ Accoppia ora</strong>.</li>
+        <li>Vedi i toast: "Tentativo di connessione…" → "Canale aperto" → "✅ Device accoppiato".</li>
+      </ol>
+
+      <div class="warn-box">
+        ⚠️ <strong>Attenzione al browser.</strong> Su iOS, la Fotocamera apre i link nel browser predefinito (di solito Safari). Se la PWA è installata da Chrome invece che Safari, i dati del pairing finiscono in Safari e non nell'app installata. Consiglio: scegli un solo browser (Safari per iOS è consigliato) e installa la PWA da quello. Vedi <a href="#installare">sezione 4</a>.
+      </div>
+
+      <h3>Se il QR non si legge</h3>
+      <p>Alternativa manuale:</p>
+      <ol>
+        <li>Sul Mac, clicca il bottone <strong>📋 Copia</strong> sotto il QR.</li>
+        <li>Invia il codice a te stesso via iMessage, WhatsApp, email, AirDrop, qualunque cosa.</li>
+        <li>Sull'iPhone, apri il messaggio e copia il testo.</li>
+        <li>Apri la PWA su iPhone → Pairing → incolla nel campo "Modalità controller" → dai un nome → Accoppia.</li>
+      </ol>
+
+      <h3>Come funziona la cifratura</h3>
+      <p>Quando generi il codice, MyDeviceGuard crea localmente una chiave AES-GCM 256-bit casuale. La chiave viene inserita nel QR insieme al Peer ID WebRTC. L'altro device, scansionando, ottiene la stessa chiave. Da quel momento, ogni messaggio P2P è cifrato con questa chiave prima di essere spedito. Chi intercetta il traffico (inclusi i server di signaling) vede solo bytes casuali.</p>
+
+      <p>I pairing sono salvati nella sezione "Device accoppiati" in fondo alla pagina. Possono essere rimossi in qualsiasi momento.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 13. CONTROLLER ===================== -->
+    <div class="card">
+      <h2 id="controller">13. Controller (controllo remoto)</h2>
+      <p>La pagina Controller mostra la lista dei tuoi device accoppiati. È la sezione da usare <em>dopo</em> aver fatto il pairing.</p>
+
+      <h3>Connettersi a un device</h3>
+      <ol class="step">
+        <li>Clicca <strong>Connetti</strong> sulla card del device.</li>
+        <li>Appare un pannello con Peer ID, stato "connesso" (verde) e quattro azioni.</li>
+      </ol>
+
+      <h3>Le azioni disponibili</h3>
+      <ul>
+        <li><strong>📊 Stato device</strong>: richiede al device remoto un riepilogo (nome, tipo, user agent, se sta trackando, da quando).</li>
+        <li><strong>📋 Scarica log</strong>: scarica gli ultimi 100 eventi + 100 alert del device remoto.</li>
+        <li><strong>🔍 Esegui audit</strong>: fa eseguire un audit completo sul device remoto e si fa mandare i risultati.</li>
+        <li><strong>Disconnetti</strong>: chiude il canale P2P.</li>
+      </ul>
+
+      <h3>La card Risposta</h3>
+      <p>Dopo una richiesta, si apre una card "📨 Risposta" con tre pulsanti:</p>
+      <ul>
+        <li><strong>💾 Salva come file</strong>: scarica davvero il JSON come file (es. <code>mydeviceguard-logs-...</code>).</li>
+        <li><strong>📋 Copia JSON</strong>: copia tutto negli appunti.</li>
+        <li><strong>✕ Chiudi</strong>: nasconde la card.</li>
+      </ul>
+
+      <div class="warn-box">
+        ⚠️ <strong>Perché il device remoto deve essere "vivo".</strong> La connessione P2P richiede che entrambi abbiano la PWA aperta in quel momento. Se l'iPhone tenta di connettersi al Mac ma il Mac ha chiuso la PWA o ha messo il tab in standby aggressivo, la connessione fallisce.
+      </div>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 14. LOG ===================== -->
+    <div class="card">
+      <h2 id="log">14. Log locali</h2>
+      <p>La pagina Log mostra la cronologia completa di eventi e alert salvati su questo device. In alto hai filtri:</p>
+      <ul>
+        <li><strong>Cerca testo libero</strong>: filtra in tempo reale cercando parole chiave nel contenuto.</li>
+        <li><strong>Filtro per tipo</strong>: menu a tendina con tutti i tipi di evento presenti (<code>session_start</code>, <code>audit_snapshot</code>, <code>peer_paired</code>, ecc.).</li>
+        <li><strong>⬇️ CSV</strong>: esporta tutto in un file compatibile Excel/Numbers.</li>
+        <li><strong>⬇️ JSON</strong>: esporta tutto (eventi + alert) in formato JSON per backup.</li>
+        <li><strong>🗑️ Cancella log</strong>: azzera eventi e alert. Attenzione: non reversibile.</li>
+      </ul>
+
+      <h3>Tabelle</h3>
+      <p>La pagina ha due tabelle:</p>
+      <ul>
+        <li><strong>Eventi</strong>: ogni entry ha timestamp, tipo, nome device e dettagli.</li>
+        <li><strong>Alert</strong>: ogni entry ha timestamp, tipo, gravità (info/warn/danger) e descrizione.</li>
+      </ul>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 15. STATISTICHE ===================== -->
+    <div class="card">
+      <h2 id="stats">15. Statistiche</h2>
+      <p>La pagina Statistiche trasforma i dati grezzi dei log in visualizzazioni utili.</p>
+
+      <h3>Numeri chiave (30 giorni)</h3>
+      <p>Quattro KPI visivi: quante sessioni, audit eseguiti, alert totali, cambi di sicurezza rilevati nell'ultimo mese.</p>
+
+      <h3>Sessioni per giorno</h3>
+      <p>Istogramma degli ultimi 14 giorni, una barra al giorno, conta quante volte hai avviato il Tracker.</p>
+
+      <h3>Salute del device nel tempo</h3>
+      <p>Grafico a linee con 3 serie: critici (rosso), avvisi (giallo), OK (verde). Mostra come è variata la "salute" del device negli ultimi 14 giorni basandosi sugli <code>audit_snapshot</code>. Se attivi l'audit schedulato, dopo qualche giorno qui vedi una storia chiara.</p>
+
+      <h3>Alert per tipo</h3>
+      <p>Grafico a ciambella con la distribuzione delle categorie di alert (digitazione anomala, cambi sicurezza, HID ignoti, ecc.). Aiuta a capire dove stai avendo più problemi.</p>
+
+      <h3>Esporta CSV riepilogo</h3>
+      <p>Scarica un CSV aggregato per giorno, utile per archiviazione o ulteriori analisi con strumenti esterni. Il CSV contiene solo conteggi numerici, nessun dettaglio sensibile.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 16. BACKUP ===================== -->
+    <div class="card">
+      <h2 id="backup">16. Backup cifrato</h2>
+      <p>Il backup è il modo sicuro per:</p>
+      <ul>
+        <li>Avere una copia dei dati prima di una pulizia cache o reinstallo</li>
+        <li>Migrare i dati a un nuovo device (anche con identità: il nuovo device diventa "il vecchio")</li>
+        <li>Unire i dati di due device in uno</li>
+      </ul>
+
+      <h3>Come fare l'export</h3>
+      <ol class="step">
+        <li>Vai su <strong>Backup</strong>.</li>
+        <li>Inserisci una password almeno di 6 caratteri. Ripetila nel secondo campo.</li>
+        <li>Clicca <strong>💾 Scarica backup</strong>.</li>
+        <li>Viene scaricato un file <code>.mdg</code> con la data nel nome.</li>
+      </ol>
+      <div class="warn-box">
+        ⚠️ <strong>La password non è recuperabile.</strong> Se la dimentichi, il backup è inutilizzabile anche per noi. Scegli qualcosa che ricordi o salvala in un password manager.
+      </div>
+
+      <h3>Come fare l'import</h3>
+      <ol class="step">
+        <li>Scegli il file <code>.mdg</code>.</li>
+        <li>Inserisci la password.</li>
+        <li>Clicca <strong>🔍 Apri anteprima</strong>.</li>
+        <li>Vedi quando è stato creato, nome device origine, quanti eventi/alert/pairing contiene.</li>
+        <li>Scegli modalità:
+          <ul>
+            <li><strong>Unione</strong>: aggiunge i dati ai tuoi attuali (default, utile se vuoi fondere due device).</li>
+            <li><strong>Sostituzione</strong>: cancella i tuoi attuali e riscrive con quelli del backup. Per migrazione completa.</li>
+          </ul>
+        </li>
+        <li>Opzionale: spunta <strong>"Ripristina anche nome e ID device"</strong>. Così il device corrente "diventa" quello del backup (stesso UUID, stesso nome). Utile per migrazione 1:1.</li>
+        <li>Clicca <strong>✅ Applica ripristino</strong>.</li>
+      </ol>
+
+      <h3>Come è fatto tecnicamente</h3>
+      <p>Il file <code>.mdg</code> è un JSON con campi <code>format</code>, <code>salt</code>, <code>iv</code>, <code>data</code>. Il campo <code>data</code> è il tuo contenuto cifrato con <strong>AES-GCM 256-bit</strong>, usando una chiave derivata dalla tua password con <strong>PBKDF2-SHA256</strong> e 250.000 iterazioni. Il salt e l'IV sono casuali per ogni export (quindi due backup dello stesso stato producono file diversi — privacy-safe).</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 17. SCENARI ===================== -->
+    <div class="card">
+      <h2 id="scenari">17. Scenari d'uso tipici</h2>
+
+      <h3>Scenario A – Professionista che vuole sapere quando il suo laptop viene toccato</h3>
+      <ol>
+        <li>Installo la PWA sul laptop.</li>
+        <li>Attivo il <strong>Tracker</strong> quando inizio a lavorare.</li>
+        <li>Attivo <strong>Audit schedulato ogni 30 min</strong>.</li>
+        <li>Popolo la <strong>Whitelist HID</strong> con la mia tastiera e il mio mouse, attivo il watch.</li>
+        <li>Installo anche sul mio smartphone e faccio <strong>Pairing</strong>.</li>
+        <li>Abilito le notifiche sia sul laptop sia sullo smartphone.</li>
+      </ol>
+      <p>Risultato: se qualcuno apre il laptop o collega una USB sospetta mentre sono via, ricevo notifica, e dallo smartphone posso chiedere lo stato del laptop da remoto.</p>
+
+      <h3>Scenario B – Utente paranoico sulla privacy</h3>
+      <ol>
+        <li>Installo la PWA. Rifiuto le notifiche (non mi servono).</li>
+        <li>NON attivo lo scheduler (niente attività background).</li>
+        <li>Uso la PWA in modalità "consultazione": quando voglio, apro Security e faccio un audit manuale.</li>
+        <li>Esporto il backup ogni settimana su una chiavetta USB, password con una frase robusta.</li>
+      </ol>
+
+      <h3>Scenario C – Migrazione tra device</h3>
+      <p>Ho cambiato laptop, voglio portare tutto sul nuovo:</p>
+      <ol>
+        <li>Sul vecchio: Backup → export con password.</li>
+        <li>Trasferisco il file al nuovo (AirDrop, cloud storage, USB).</li>
+        <li>Sul nuovo: installo la PWA, completo il primo avvio con nome temporaneo.</li>
+        <li>Backup → Importa → scegli file → password → modalità <strong>Sostituzione</strong> + spunta <strong>"Ripristina identità"</strong>.</li>
+        <li>Dopo il reload, il nuovo device è indistinguibile dal vecchio dal punto di vista della PWA: stesso UUID, stesso nome, stessi pairing funzionano.</li>
+      </ol>
+
+      <h3>Scenario D – Consulenza/supporto tecnico</h3>
+      <p>Voglio far vedere a un tecnico i log del mio laptop senza dargli accesso fisico:</p>
+      <ol>
+        <li>Dal mio smartphone, apro Controller e mi connetto al laptop remoto.</li>
+        <li>Clicco <strong>Scarica log</strong> → <strong>Salva come file</strong>.</li>
+        <li>Invio il JSON al tecnico via email.</li>
+      </ol>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 18. FAQ ===================== -->
+    <div class="card">
+      <h2 id="faq">18. Domande frequenti</h2>
+
+      <h3>Posso usare MyDeviceGuard senza internet?</h3>
+      <p>Sì, dopo il primo caricamento il service worker mantiene l'app disponibile offline. Le uniche cose che richiedono internet sono il pairing iniziale (per caricare la libreria P2P) e la comunicazione P2P tra device. Audit, log, grafici, backup funzionano tutti offline.</p>
+
+      <h3>Se cambio browser sullo stesso computer, i dati si trasferiscono?</h3>
+      <p>No, i dati sono per-browser. Chrome e Safari sul tuo Mac hanno storage separato. Se vuoi trasferire i dati, usa Backup.</p>
+
+      <h3>Posso condividere la PWA con altre persone?</h3>
+      <p>Sì, ti basta dare loro il link dove è hostata. Ogni utente che la apre avrà la sua installazione privata, con i suoi dati, senza vedere i tuoi.</p>
+
+      <h3>I miei pairing sono pubblici?</h3>
+      <p>No, il pairing è strettamente privato. La chiave AES che protegge la comunicazione è scambiata solo tramite QR, non passa da nessun server.</p>
+
+      <h3>Cosa succede se due persone scansionano lo stesso QR?</h3>
+      <p>Sono entrambe in grado di comunicare con il device host (anche se non contemporaneamente sullo stesso canale). Se è un problema, ri-genera un nuovo codice di pairing: quello vecchio scade quando chiudi la pagina Pairing.</p>
+
+      <h3>L'app usa la mia posizione / camera / microfono?</h3>
+      <p>No, mai. La PWA <em>controlla</em> se il browser ha permessi attivi per queste cose, ma non li usa. Se vedi "granted" su camera/mic nel Security Audit, è perché tu (o un'altra app web su questo dominio) li hai autorizzati in passato. Puoi revocarli dalle impostazioni browser.</p>
+
+      <h3>Su iPhone le notifiche arrivano anche se chiudo l'app?</h3>
+      <p>Dipende. Le notifiche possono arrivare solo mentre l'audit schedulato è in esecuzione, e lo scheduler gira solo mentre la PWA è aperta. iOS mette in pausa le PWA dopo qualche minuto di inattività. In pratica: le notifiche arrivano se la PWA è stata aperta di recente o è in background "caldo". Per avere vero monitoraggio 24/7 servirebbe un servizio nativo — è un limite del modello PWA, non di MyDeviceGuard.</p>
+
+      <h3>Chi può vedere la mia whitelist HID o i miei pairing?</h3>
+      <p>Solo tu, sul browser dove li hai configurati. Viaggiano solo se tu esporti un backup.</p>
+
+      <h3>L'app si aggiorna automaticamente?</h3>
+      <p>Sì. Appena arriva una nuova versione sul server, al prossimo riavvio della PWA il service worker la scarica, si attiva e ricarica la pagina. Vedi un toast "🔄 Aggiornamento installato – ricarico…". Non devi fare nulla.</p>
+
+      <h3>Perché il Security Audit mi segnala certi permessi con "warn"?</h3>
+      <p>Perché sono permessi attivi che in un contesto di sicurezza vanno verificati: se non ricordi di aver concesso accesso alla camera a questo dominio, è una informazione utile.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 19. TROUBLESHOOTING ===================== -->
+    <div class="card">
+      <h2 id="troubleshooting">19. Risoluzione problemi</h2>
+
+      <h3>La PWA appare senza stili / look "HTML nudo"</h3>
+      <p>Il CSS non si è caricato, tipicamente per cache del service worker in stato inconsistente dopo un aggiornamento. Soluzione:</p>
+      <ol>
+        <li>DevTools → Application → Service Workers → Unregister.</li>
+        <li>Application → Storage → Clear site data.</li>
+        <li>Hard reload (⌘⇧R o Ctrl+F5).</li>
+      </ol>
+
+      <h3>Il QR di pairing è vuoto / non si disegna</h3>
+      <p>Storia vecchia, risolta nelle versioni recenti grazie alla libreria QR locale. Se ancora succede, verifica di non avere un adblock troppo aggressivo che blocca script JS di pagina. Prova in finestra anonima.</p>
+
+      <h3>"Scarica log" dal Controller non mostra nulla</h3>
+      <p>Il device remoto deve avere aperta una pagina della PWA che sappia rispondere ai comandi: la pagina Pairing con QR attivo, oppure la pagina Tracker con "Attiva ricevitore" premuto. Se la pagina è chiusa, il comando cade nel vuoto.</p>
+
+      <h3>Sull'iPhone il QR apre Chrome ma la PWA è installata da Safari</h3>
+      <p>Fotocamera iOS apre i link nel browser predefinito di sistema. Se questo è diverso dal browser con cui hai installato la PWA, i pairing finiscono in un "altro MyDeviceGuard". Soluzione: scegli un solo browser (Safari consigliato), disinstalla l'altro dall'home, reinstalla la PWA dall'unico browser scelto. In alternativa, usa il copia-incolla manuale del codice invece che lo scan QR.</p>
+
+      <h3>Le notifiche non arrivano anche se concesse</h3>
+      <p>Controlla:</p>
+      <ul>
+        <li>Livello notifiche non è su "Nessuna".</li>
+        <li>Non sei in modalità "Non disturbare" sul sistema operativo.</li>
+        <li>L'alert che ti aspettavi ha una severity coerente col livello scelto (se livello = "Solo critici" e l'alert è warn, non viene mandato).</li>
+        <li>Su iPhone, la PWA deve essere installata sulla Home e iOS ≥ 16.4.</li>
+      </ul>
+
+      <h3>Dopo un refresh ho perso il Peer ID del Mac</h3>
+      <p>Corretto, è così per design. Il Peer ID è effimero, cambia ogni volta. Ma la <strong>chiave AES</strong> del pairing è salvata stabilmente. Se il Mac si rigenera un peerId diverso, il pairing sul telefono non lo trova più. Soluzione pratica: mantieni la pagina Pairing aperta sul Mac finché ti serve il canale P2P.</p>
+      <p>Nota: si può migliorare usando un peerId fisso salvato in IndexedDB — è una feature che può arrivare in futuro.</p>
+
+      <h3>Voglio ricominciare da zero</h3>
+      <p>Home → card "Dati e privacy" → <strong>Cancella tutto</strong>. Azzera tutto ciò che la PWA sa di te, su questo browser. Oppure, per una pulizia più completa includendo cache dei file: DevTools → Application → Clear site data.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <!-- ===================== 20. SICUREZZA ===================== -->
+    <div class="card">
+      <h2 id="sicurezza">20. Nota tecnica sulla sicurezza</h2>
+      <p>Per chi vuole sapere com'è fatta la "cassaforte":</p>
+
+      <h3>Cifratura P2P</h3>
+      <p>Due strati sovrapposti:</p>
+      <ol>
+        <li><strong>DTLS + SRTP</strong> a livello WebRTC: tutto il traffico P2P è già cifrato dal browser tramite lo standard WebRTC.</li>
+        <li><strong>AES-GCM 256</strong> a livello applicativo: ogni messaggio è cifrato con una chiave generata al pairing, IV casuale per ogni messaggio. Senza la chiave, i pacchetti sono illeggibili anche se qualcuno aggirasse il DTLS.</li>
+      </ol>
+
+      <h3>Cifratura backup</h3>
+      <p>AES-GCM 256. La chiave è derivata dalla password utente con <strong>PBKDF2-SHA256</strong>, 250.000 iterazioni, salt casuale 16 byte. IV casuale 12 byte. Questo rende attacchi di forza bruta offline molto costosi.</p>
+
+      <h3>Librerie esterne</h3>
+      <p>Tutte le dipendenze sono embedded localmente (Chart.js, libreria QR, PeerJS). Nessun CDN esterno viene contattato a runtime. Questo sia per privacy sia per robustezza offline.</p>
+
+      <h3>Codice sorgente</h3>
+      <p>Il codice è open source con licenza MIT. Puoi ispezionarlo, forkarlo, modificarlo, auto-ospitarlo. Chi vuole la garanzia totale può usare solo la propria istanza.</p>
+      <div class="back-top"><a href="#top">↑ Torna all'indice</a></div>
+    </div>
+
+    <div class="card" style="text-align:center">
+      <p class="dim">Fine del manuale. Per suggerimenti o segnalazioni, apri una issue sul repository GitHub del progetto.</p>
+      <p class="small dim">MyDeviceGuard · Licenza MIT · Privacy-first · Made with care.</p>
+    </div>
+  </div>
+
+  <script src="js/common.js"></script>
+</body>
+</html>

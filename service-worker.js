@@ -17,7 +17,7 @@
  *    un toast "Aggiornato alla versione X" e si ricarica.
  */
 
-const CACHE_VERSION = 'v11';
+const CACHE_VERSION = 'v12';
 const CACHE_NAME = `mydeviceguard-${CACHE_VERSION}`;
 
 const LONG_LIVED_ASSETS = [

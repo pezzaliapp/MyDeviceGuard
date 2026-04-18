@@ -49,6 +49,11 @@
       "name": "Statistiche",
       "url": "stats.html",
       "icons": [{ "src": "icon/mydeviceguard-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Manuale",
+      "url": "help.html",
+      "icons": [{ "src": "icon/mydeviceguard-192.png", "sizes": "192x192" }]
     }
   ]
 }
