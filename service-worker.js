@@ -1,93 +1,144 @@
 /* MyDeviceGuard – service-worker.js
- * Strategia:
- *  - Cache-first per asset statici (HTML, CSS, JS, icone, manifest)
- *  - Stale-while-revalidate per CDN (PeerJS, QR library)
- *  - Bypass per tutto il resto (inclusi WebRTC, che non passa comunque da fetch)
+ *
+ * Strategia di aggiornamento automatico:
+ *
+ *  - NETWORK-FIRST per HTML e JS della PWA.
+ *    A ogni apertura, se siamo online, scarichiamo SEMPRE la versione fresca
+ *    dal server. Così quando spingi un fix su GitHub, al prossimo refresh
+ *    l'utente lo vede automaticamente, senza dover svuotare la cache.
+ *    Se siamo offline, usiamo l'ultima versione in cache come fallback.
+ *
+ *  - CACHE-FIRST per asset statici raramente modificati (icone, manifest, css).
+ *
+ *  - SKIPWAITING + CLIENTS.CLAIM: il nuovo service worker prende il controllo
+ *    immediatamente, senza aspettare che l'utente chiuda tutte le schede.
+ *
+ *  - POSTMESSAGE ai client quando attiva una nuova versione: la pagina mostra
+ *    un toast "Aggiornato alla versione X" e si ricarica.
  */
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v6';
 const CACHE_NAME = `mydeviceguard-${CACHE_VERSION}`;
 
-const STATIC_ASSETS = [
-  './',
-  'index.html',
-  'tracker.html',
-  'controller.html',
-  'security.html',
-  'logs.html',
-  'pairing.html',
+const LONG_LIVED_ASSETS = [
   'manifest.json',
   'css/style.css',
-  'js/common.js',
-  'js/db.js',
-  'js/security.js',
-  'js/peer.js',
-  'js/qrcode.js',
   'icon/mydeviceguard-192.png',
   'icon/mydeviceguard-512.png'
 ];
 
-// CDN che vale la pena cachare (sono tag <script src=...> presenti nelle pagine)
-const CDN_CACHE_HOSTS = [
-  'unpkg.com',
-  'cdn.jsdelivr.net'
-];
+const DYNAMIC_EXTENSIONS = ['.html', '.js'];
 
 self.addEventListener('install', evt => {
   evt.waitUntil(
     caches.open(CACHE_NAME).then(cache =>
-      // addAll fallisce se uno qualsiasi fallisce; usiamo add singolo per essere robusti
-      Promise.all(STATIC_ASSETS.map(u => cache.add(u).catch(() => null)))
+      Promise.all(LONG_LIVED_ASSETS.map(u => cache.add(u).catch(() => null)))
     )
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', evt => {
-  evt.waitUntil(
-    caches.keys().then(keys => Promise.all(
+  evt.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
       keys.filter(k => k.startsWith('mydeviceguard-') && k !== CACHE_NAME)
           .map(k => caches.delete(k))
-    ))
-  );
-  self.clients.claim();
+    );
+    await self.clients.claim();
+    const clients = await self.clients.matchAll({ type: 'window' });
+    for (const c of clients) {
+      c.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
+    }
+  })());
 });
+
+self.addEventListener('message', evt => {
+  if (evt.data && evt.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+function isDynamicRequest(url) {
+  if (url.origin !== location.origin) return false;
+  const path = url.pathname;
+  if (path === '/' || path.endsWith('/')) return true;
+  return DYNAMIC_EXTENSIONS.some(ext => path.endsWith(ext));
+}
+
+function isLongLivedAsset(url) {
+  if (url.origin !== location.origin) return false;
+  const rel = url.pathname.replace(/^\/+/, '').replace(/^MyDeviceGuard\//, '');
+  return LONG_LIVED_ASSETS.includes(rel);
+}
 
 self.addEventListener('fetch', evt => {
   const req = evt.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Stale-while-revalidate per CDN noti
-  if (CDN_CACHE_HOSTS.some(h => url.hostname.endsWith(h))) {
-    evt.respondWith(
-      caches.open(CACHE_NAME).then(cache =>
-        cache.match(req).then(hit => {
-          const net = fetch(req).then(resp => {
-            if (resp.ok) cache.put(req, resp.clone());
-            return resp;
-          }).catch(() => hit);
-          return hit || net;
-        })
-      )
-    );
+  if (url.hostname.includes('peerjs') || url.hostname.includes('turn.')) return;
+
+  if (isDynamicRequest(url)) {
+    evt.respondWith(networkFirst(req));
     return;
   }
-
-  // Per le nostre risorse statiche: cache-first con fallback rete
+  if (isLongLivedAsset(url)) {
+    evt.respondWith(cacheFirst(req));
+    return;
+  }
   if (url.origin === location.origin) {
-    evt.respondWith(
-      caches.match(req).then(hit => hit || fetch(req).then(resp => {
-        if (resp.ok) {
-          const clone = resp.clone();
-          caches.open(CACHE_NAME).then(c => c.put(req, clone));
-        }
-        return resp;
-      }).catch(() => caches.match('index.html')))
-    );
+    evt.respondWith(networkFirst(req));
     return;
   }
-
-  // Tutto il resto: rete, con fallback cache se offline
-  evt.respondWith(fetch(req).catch(() => caches.match(req)));
+  evt.respondWith(staleWhileRevalidate(req));
 });
+
+async function networkFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const netPromise = fetch(req);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const resp = await Promise.race([netPromise, timeout]);
+    if (resp && resp.ok) {
+      cache.put(req, resp.clone());
+      return resp;
+    }
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    return resp;
+  } catch (_) {
+    const hit = await cache.match(req);
+    if (hit) return hit;
+    if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) {
+      const index = await cache.match('index.html') || await cache.match('./');
+      if (index) return index;
+    }
+    return new Response('Offline e risorsa non disponibile in cache.', {
+      status: 503, statusText: 'Offline', headers: { 'Content-Type': 'text/plain' }
+    });
+  }
+}
+
+async function cacheFirst(req) {
+  const cache = await caches.open(CACHE_NAME);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  try {
+    const resp = await fetch(req);
+    if (resp.ok) cache.put(req, resp.clone());
+    return resp;
+  } catch (_) {
+    return new Response('Offline', { status: 503 });
+  }
+}
+
+async function staleWhileRevalidate(req) {
+  const cache = await caches.open(CACHE_NAME);
+  const hit = await cache.match(req);
+  const netPromise = fetch(req).then(resp => {
+    if (resp.ok) cache.put(req, resp.clone());
+    return resp;
+  }).catch(() => hit);
+  return hit || netPromise;
+}

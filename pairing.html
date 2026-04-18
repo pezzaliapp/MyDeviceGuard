@@ -75,6 +75,7 @@
   <script src="js/common.js"></script>
   <script src="js/db.js"></script>
   <script src="js/peer.js"></script>
+  <script src="js/security.js"></script>
   <!-- Libreria QR locale (Kazuhiko Arase, MIT) - nessuna dipendenza da CDN -->
   <script src="js/qrcode.js"></script>
   <script>
@@ -168,15 +169,40 @@
             conn.onOpen = () => {
               genStatus.innerHTML = '<span class="badge ok">controller connesso ✓</span>';
               MDG.toast('🔗 Pairing completato');
+              MDG.db.addEvent({
+                type: 'controller_connected',
+                deviceId: MDG.getOrCreateDeviceId(),
+                deviceName: MDG.getDeviceName(),
+                peer: conn.peer
+              });
             };
-            conn.onMessage = msg => {
+            conn.onMessage = async msg => {
               if (msg.cmd === 'get_status') {
                 conn.send({
                   type: 'status',
+                  deviceId: MDG.getOrCreateDeviceId(),
                   deviceName: MDG.getDeviceName(),
                   deviceKind: MDG.getDeviceKind(),
+                  userAgent: navigator.userAgent,
                   ts: Date.now()
                 });
+              } else if (msg.cmd === 'get_logs') {
+                const events = await MDG.db.getAllEvents({ limit: 100 });
+                const alerts = await MDG.db.getAllAlerts({ limit: 100 });
+                const mine = events.filter(e => e.deviceId === MDG.getOrCreateDeviceId());
+                conn.send({ type: 'logs', events: mine, alerts, ts: Date.now() });
+              } else if (msg.cmd === 'run_audit') {
+                // Security module caricato su questa pagina? se sì lo usa, altrimenti fallback minimo
+                if (window.MDG && MDG.security && MDG.security.runAudit) {
+                  const results = await MDG.security.runAudit();
+                  conn.send({ type: 'audit', results, ts: Date.now() });
+                } else {
+                  conn.send({ type: 'audit', results: [{
+                    key: 'nosec', label: 'Audit', status: 'warn',
+                    value: 'Modulo security non caricato su questa pagina',
+                    hint: 'Apri tracker.html o security.html sul device per l\'audit completo.'
+                  }], ts: Date.now() });
+                }
               }
             };
           }

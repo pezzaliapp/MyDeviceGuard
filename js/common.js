@@ -92,10 +92,58 @@ function toast(msg, ms = 2200) {
   toast._t = setTimeout(() => el.classList.remove('show'), ms);
 }
 
-// ---------- SERVICE WORKER ----------
+// ---------- SERVICE WORKER con auto-update ----------
+// La PWA controlla periodicamente se c'è una nuova versione sul server.
+// Se sì: il nuovo SW si attiva subito (grazie a skipWaiting nel SW), ci manda
+// un messaggio SW_UPDATED, noi mostriamo un toast e ricarichiamo la pagina.
+//
+// L'utente non deve fare NULLA: nessuno "svuota cache", nessuna reinstallazione.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('service-worker.js').catch(e => console.warn('SW fail', e));
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('service-worker.js');
+
+      // Controllo immediato all'avvio
+      reg.update().catch(() => {});
+
+      // Controllo periodico ogni 30 minuti mentre la PWA è aperta
+      setInterval(() => reg.update().catch(() => {}), 30 * 60 * 1000);
+
+      // Controllo anche quando la pagina torna visibile (es. cambio tab)
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') reg.update().catch(() => {});
+      });
+
+      // Quando un nuovo SW si installa, invitalo a prendere il controllo
+      reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (!nw) return;
+        nw.addEventListener('statechange', () => {
+          if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+            // C'è già un SW attivo: il nuovo è in attesa → forzalo ad attivarsi
+            nw.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+
+      // Il SW attivato ci avvisa (PostMessage SW_UPDATED): mostriamo toast e reload
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data && e.data.type === 'SW_UPDATED') {
+          toast('🔄 Aggiornamento installato – ricarico…', 1500);
+          setTimeout(() => location.reload(), 1600);
+        }
+      });
+
+      // Quando il controller cambia (nuovo SW ha preso il posto), reload
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (refreshing) return;
+        refreshing = true;
+        location.reload();
+      });
+    } catch (e) {
+      console.warn('SW register fail', e);
+    }
   });
 }
 
