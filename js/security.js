@@ -274,11 +274,173 @@
     }));
   }
 
+  // ---------- SCHEDULER AUDIT ----------
+  // Esegue audit periodici in background e rileva cambiamenti rispetto all'ultimo.
+  const SCHED_LS_ENABLED = 'mdg.audit.autoEnabled';
+  const SCHED_LS_INTERVAL = 'mdg.audit.intervalMinutes';
+  const SCHED_LS_LAST = 'mdg.audit.lastSnapshot';
+  const DEFAULT_INTERVAL_MIN = 60;
+  const STARTUP_DELAY_MS = 5000;
+
+  let schedTimer = null;
+
+  function getAutoEnabled() {
+    // Default: OFF. L'utente deve attivarlo esplicitamente (privacy: evitiamo attività
+    // in background senza consenso).
+    return localStorage.getItem(SCHED_LS_ENABLED) === 'true';
+  }
+  function setAutoEnabled(b) {
+    localStorage.setItem(SCHED_LS_ENABLED, String(!!b));
+    if (b) startAutoAudit();
+    else stopAutoAudit();
+  }
+  function getIntervalMinutes() {
+    const n = parseInt(localStorage.getItem(SCHED_LS_INTERVAL) || '', 10);
+    return (n >= 5 && n <= 1440) ? n : DEFAULT_INTERVAL_MIN;
+  }
+  function setIntervalMinutes(n) {
+    n = Math.max(5, Math.min(1440, parseInt(n, 10) || DEFAULT_INTERVAL_MIN));
+    localStorage.setItem(SCHED_LS_INTERVAL, String(n));
+    if (getAutoEnabled()) startAutoAudit(); // restart timer
+  }
+  function getLastSnapshot() {
+    try { return JSON.parse(localStorage.getItem(SCHED_LS_LAST) || 'null'); }
+    catch (_) { return null; }
+  }
+  function setLastSnapshot(snap) {
+    localStorage.setItem(SCHED_LS_LAST, JSON.stringify(snap));
+  }
+
+  function summarize(results) {
+    const out = { total: results.length, ok: 0, warn: 0, danger: 0, info: 0, byKey: {} };
+    for (const r of results) {
+      out[r.status] = (out[r.status] || 0) + 1;
+      // Manteniamo solo key->status per confronto, senza valori sensibili tipo UA
+      out.byKey[r.key] = { status: r.status, value: r.value };
+    }
+    return out;
+  }
+
+  function diffSnapshots(prev, curr) {
+    // Restituisce un array di cambiamenti "interessanti" tra due snapshot.
+    if (!prev || !prev.byKey) return [];
+    const changes = [];
+    const keys = new Set([...Object.keys(prev.byKey), ...Object.keys(curr.byKey)]);
+    for (const k of keys) {
+      const a = prev.byKey[k];
+      const b = curr.byKey[k];
+      if (!a && b) {
+        changes.push({ key: k, type: 'added', to: b });
+      } else if (a && !b) {
+        changes.push({ key: k, type: 'removed', from: a });
+      } else if (a && b && (a.status !== b.status || a.value !== b.value)) {
+        changes.push({ key: k, type: 'changed', from: a, to: b });
+      }
+    }
+    return changes;
+  }
+
+  function severityFromChange(ch) {
+    // Cambi che consideriamo davvero seri → alert con severity 'warn'
+    // (potrebbero diventare 'danger' con policy più aggressive)
+    const sensitive = ['secure_context', 'perm_camera', 'perm_microphone',
+                       'perm_geolocation', 'perm_clipboard-read', 'service_worker',
+                       'webhid', 'webusb'];
+    const isSensitive = sensitive.includes(ch.key);
+    if (ch.type === 'changed' && ch.to && ch.to.status === 'danger') return 'danger';
+    if (isSensitive) return 'warn';
+    return 'info';
+  }
+
+  async function runScheduledAudit() {
+    if (!window.MDG || !MDG.db) return;
+    try {
+      const results = await runAudit();
+      const snap = summarize(results);
+      snap.ts = Date.now();
+
+      const prev = getLastSnapshot();
+      const changes = diffSnapshots(prev, snap);
+
+      // Salva evento compresso nei log
+      await MDG.db.addEvent({
+        type: 'audit_snapshot',
+        deviceId: MDG.getOrCreateDeviceId(),
+        deviceName: MDG.getDeviceName(),
+        summary: {
+          total: snap.total,
+          ok: snap.ok || 0,
+          warn: snap.warn || 0,
+          danger: snap.danger || 0,
+          info: snap.info || 0
+        },
+        changedCount: changes.length
+      });
+
+      // Se ci sono cambiamenti, generiamo alert + toast discreto
+      if (changes.length && prev) {
+        for (const ch of changes) {
+          const sev = severityFromChange(ch);
+          const fromStr = ch.from ? `${ch.from.status}:${ch.from.value}` : '—';
+          const toStr = ch.to ? `${ch.to.status}:${ch.to.value}` : '—';
+          await MDG.db.addAlert({
+            type: 'security_change',
+            severity: sev,
+            description: `${ch.key}: ${fromStr} → ${toStr}`,
+            deviceId: MDG.getOrCreateDeviceId(),
+            deviceName: MDG.getDeviceName()
+          });
+        }
+        if (window.MDG && MDG.toast) {
+          MDG.toast(`🔔 Audit: ${changes.length} cambiamenti di sicurezza rilevati`);
+        }
+      }
+
+      setLastSnapshot(snap);
+      return { snap, changes };
+    } catch (e) {
+      console.warn('Scheduled audit error', e);
+    }
+  }
+
+  function startAutoAudit() {
+    stopAutoAudit();
+    // Prima esecuzione dopo un piccolo delay per non pesare sull'avvio
+    setTimeout(() => runScheduledAudit(), STARTUP_DELAY_MS);
+    const interval = getIntervalMinutes() * 60 * 1000;
+    schedTimer = setInterval(() => runScheduledAudit(), interval);
+  }
+
+  function stopAutoAudit() {
+    if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
+  }
+
+  // Avvio automatico se abilitato dall'utente
+  if (typeof window !== 'undefined') {
+    window.addEventListener('load', () => {
+      if (getAutoEnabled()) startAutoAudit();
+    });
+    // Quando l'utente torna sulla PWA dopo un po', forza un check
+    document.addEventListener && document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && getAutoEnabled()) {
+        const prev = getLastSnapshot();
+        const age = prev ? Date.now() - (prev.ts || 0) : Infinity;
+        const threshold = getIntervalMinutes() * 60 * 1000;
+        if (age > threshold) runScheduledAudit();
+      }
+    });
+  }
+
   window.MDG = Object.assign(window.MDG || {}, {
     security: {
       runAudit,
       startTypingWatcher, stopTypingWatcher,
-      listHidDevices, requestHidDevice
+      listHidDevices, requestHidDevice,
+      // Scheduler
+      getAutoEnabled, setAutoEnabled,
+      getIntervalMinutes, setIntervalMinutes,
+      getLastSnapshot,
+      runScheduledAudit
     }
   });
 })();

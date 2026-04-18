@@ -42,6 +42,27 @@
       </p>
     </div>
 
+    <div class="card">
+      <h2>⏱️ Audit schedulato</h2>
+      <p class="dim">Quando attivo, la PWA esegue l'audit periodicamente in background e genera alert se qualcosa cambia rispetto all'ultima scansione (permessi concessi, nuovi dispositivi HID, HTTPS spento, ecc.).</p>
+      <div class="kv"><span class="k">Stato</span><span class="v" id="schedState"><span class="badge dim">disattivo</span></span></div>
+      <div class="kv"><span class="k">Ultimo audit</span><span class="v" id="schedLast">–</span></div>
+      <div class="kv"><span class="k">Frequenza</span><span class="v">
+        <select id="schedInterval" style="min-width:auto">
+          <option value="15">15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">60 min</option>
+          <option value="180">3 ore</option>
+          <option value="360">6 ore</option>
+          <option value="720">12 ore</option>
+        </select>
+      </span></div>
+      <div class="btn-row">
+        <button class="btn primary" id="schedToggle">Attiva</button>
+        <button class="btn" id="schedRunNow">▶️ Esegui adesso</button>
+      </div>
+    </div>
+
     <div id="resultGrid"></div>
 
     <div class="card" id="hidCard" style="display:none">
@@ -176,6 +197,60 @@
     }
     refreshAlerts();
     setInterval(refreshAlerts, 5000);
+
+    // ---------- Scheduler UI ----------
+    const schedState = document.getElementById('schedState');
+    const schedLast = document.getElementById('schedLast');
+    const schedInterval = document.getElementById('schedInterval');
+    const schedToggle = document.getElementById('schedToggle');
+    const schedRunNow = document.getElementById('schedRunNow');
+
+    function refreshSchedUI() {
+      const on = MDG.security.getAutoEnabled();
+      schedState.innerHTML = on ? '<span class="badge ok">attivo</span>' : '<span class="badge dim">disattivo</span>';
+      schedToggle.textContent = on ? 'Disattiva' : 'Attiva';
+      schedToggle.className = on ? 'btn danger' : 'btn primary';
+      schedInterval.value = String(MDG.security.getIntervalMinutes());
+
+      const last = MDG.security.getLastSnapshot();
+      if (last && last.ts) {
+        const ago = MDG.fmtRelative(last.ts);
+        const warn = last.warn || 0, danger = last.danger || 0;
+        let badge = '<span class="badge ok">pulito</span>';
+        if (danger > 0) badge = `<span class="badge danger">${danger} critici</span>`;
+        else if (warn > 0) badge = `<span class="badge warn">${warn} avvisi</span>`;
+        schedLast.innerHTML = ago + ' · ' + badge;
+      } else {
+        schedLast.innerHTML = '<span class="dim">mai eseguito</span>';
+      }
+    }
+
+    schedToggle.onclick = () => {
+      MDG.security.setAutoEnabled(!MDG.security.getAutoEnabled());
+      refreshSchedUI();
+      MDG.toast(MDG.security.getAutoEnabled() ? 'Audit schedulato attivato' : 'Audit schedulato disattivato');
+    };
+
+    schedInterval.onchange = () => {
+      MDG.security.setIntervalMinutes(parseInt(schedInterval.value, 10));
+      MDG.toast('Frequenza aggiornata');
+      refreshSchedUI();
+    };
+
+    schedRunNow.onclick = async () => {
+      MDG.toast('Audit in corso…');
+      const res = await MDG.security.runScheduledAudit();
+      refreshSchedUI();
+      refreshAlerts();
+      if (res && res.changes && res.changes.length) {
+        MDG.toast(`${res.changes.length} cambiamenti rilevati – vedi Alert`);
+      } else {
+        MDG.toast('Audit completato, nessun cambiamento');
+      }
+    };
+
+    refreshSchedUI();
+    setInterval(refreshSchedUI, 30000);
 
     // run automatico all'apertura
     renderAudit();

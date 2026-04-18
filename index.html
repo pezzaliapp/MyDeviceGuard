@@ -54,6 +54,7 @@
       <a href="security.html" class="card" style="text-decoration:none;color:inherit">
         <h2>🔍 Security Audit</h2>
         <p class="dim">Diagnostica il device: permessi, storage, rete, HID, anomalie di digitazione.</p>
+        <div id="homeAuditBadge" class="small" style="margin-top:8px"></div>
       </a>
       <a href="logs.html" class="card" style="text-decoration:none;color:inherit">
         <h2>📋 Log Locali</h2>
@@ -80,6 +81,7 @@
 
   <script src="js/common.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/security.js"></script>
   <script>
     const deviceId = MDG.getOrCreateDeviceId();
     const nameEl = document.getElementById('deviceNameInput');
@@ -138,6 +140,26 @@
       MDG.toast('Tutti i dati locali cancellati');
       setTimeout(() => location.reload(), 800);
     };
+
+    // Badge "ultimo audit" sulla card Security
+    (function renderAuditBadge() {
+      const badgeEl = document.getElementById('homeAuditBadge');
+      if (!badgeEl || !MDG.security) return;
+      const last = MDG.security.getLastSnapshot();
+      const enabled = MDG.security.getAutoEnabled();
+      if (!last || !last.ts) {
+        badgeEl.innerHTML = enabled
+          ? '<span class="badge info">schedulato · primo audit in arrivo</span>'
+          : '<span class="badge dim">audit schedulato: off</span>';
+        return;
+      }
+      const ago = MDG.fmtRelative(last.ts);
+      const warn = last.warn || 0, danger = last.danger || 0;
+      let badge = '<span class="badge ok">pulito</span>';
+      if (danger > 0) badge = `<span class="badge danger">${danger} critici</span>`;
+      else if (warn > 0) badge = `<span class="badge warn">${warn} avvisi</span>`;
+      badgeEl.innerHTML = `Ultimo audit: <span class="dim">${ago}</span> ${badge}`;
+    })();
   </script>
 </body>
 </html>
