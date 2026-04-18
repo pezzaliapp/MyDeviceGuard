@@ -88,6 +88,26 @@
     let host = null;
     let currentCode = null;
 
+    // ---------- Base64URL helpers (per hash URL sicuro) ----------
+    function b64urlEncode(s) {
+      return btoa(unescape(encodeURIComponent(s)))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function b64urlDecode(s) {
+      s = s.replace(/-/g, '+').replace(/_/g, '/');
+      while (s.length % 4) s += '=';
+      return decodeURIComponent(escape(atob(s)));
+    }
+
+    // Costruisce l'URL assoluto della pagina pairing con il codice in hash.
+    // Uso l'hash (#) e non la query (?) perché il browser NON lo invia al server,
+    // quindi il codice non finisce nei log HTTP.
+    function buildPairingURL(jsonCode) {
+      const origin = window.location.origin;
+      const path = window.location.pathname;
+      return origin + path + '#code=' + b64urlEncode(jsonCode);
+    }
+
     // ---------- Renderer QR ----------
     function renderQR(text) {
       qrContainer.innerHTML = '';
@@ -99,13 +119,16 @@
         return;
       }
       try {
-        // QR versione auto (0), error correction level M
-        const qr = qrcode(0, 'M');
-        qr.addData(text);
+        // Il QR contiene un URL, non il JSON nudo.
+        // Così dall'iPhone la Fotocamera mostra un link tappabile che apre
+        // direttamente la PWA con il codice di pairing pre-compilato.
+        const url = buildPairingURL(text);
+        // QR versione auto (0), error correction L (payload più grande = QR più denso).
+        // Per URL medio-lungo con correzione L stiamo comodi.
+        const qr = qrcode(0, 'L');
+        qr.addData(url);
         qr.make();
-        // cellSize 6, margin 2 modules
-        qrContainer.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
-        // forza dimensione leggibile
+        qrContainer.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 2, scalable: true });
         const svg = qrContainer.querySelector('svg');
         if (svg) {
           svg.style.width = '280px';
@@ -236,6 +259,45 @@
       return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
     renderList();
+
+    // ---------- AUTO-FILL DA URL HASH ----------
+    // Quando la pagina è aperta da un link QR tipo pairing.html#code=BASE64URL(...)
+    // decodifichiamo il codice, lo mettiamo nel box e mostriamo un avviso invitante.
+    (function autofillFromHash() {
+      const hash = window.location.hash || '';
+      if (!hash.startsWith('#code=')) return;
+      try {
+        const encoded = hash.slice('#code='.length);
+        const decoded = b64urlDecode(encoded);
+        const data = JSON.parse(decoded);
+        if (!data.peerId || !data.key) return;
+
+        const pasteBox = document.getElementById('pasteCode');
+        pasteBox.value = decoded;
+        if (data.name) document.getElementById('peerName').value = data.name;
+        if (data.kind) document.getElementById('peerKind').value = data.kind;
+
+        // Banner visibile sopra il box controller
+        const controllerCard = pasteBox.closest('.card');
+        const banner = document.createElement('div');
+        banner.className = 'card';
+        banner.style.background = 'rgba(0,227,148,0.12)';
+        banner.style.borderColor = 'var(--accent)';
+        banner.innerHTML = `
+          <h2>📲 Codice di pairing ricevuto</h2>
+          <p class="dim">Hai aperto un link di pairing da un altro device (<strong>${escapeHtml(data.name || 'device')}</strong>). Rivedi il nome e tocca <strong>Accoppia</strong>.</p>
+        `;
+        controllerCard.parentNode.insertBefore(banner, controllerCard);
+        controllerCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        // Pulisco l'hash dall'URL per non lasciarlo in cronologia
+        history.replaceState(null, '', window.location.pathname);
+
+        MDG.toast('Codice di pairing caricato – rivedi e accoppia');
+      } catch (e) {
+        MDG.toast('Link pairing non valido');
+      }
+    })();
 
     window.addEventListener('beforeunload', () => { if (host) host.close(); });
   </script>
